@@ -23,5 +23,19 @@ public class Adari : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine" });
 		PrivateDependencyModuleNames.AddRange(new string[] { "NavigationSystem", "Projects" });
+		if (Target.bBuildEditor)
+		{
+			// Adari.Demo points the level viewports at the test room.
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
+
+		// The same version the core reports from CMake, read from the top-level CMakeLists.txt.
+		string Version = "0.0.0";
+		foreach (string Line in File.ReadAllLines(Path.Combine(RepoRoot, "CMakeLists.txt")))
+		{
+			string T = Line.Trim();
+			if (T.StartsWith("VERSION ")) { Version = T.Substring(8).Trim(); break; }
+		}
+		PrivateDefinitions.Add("ADARI_VERSION_STRING=\"" + Version + "\"");
 	}
 }

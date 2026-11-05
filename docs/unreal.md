@@ -10,9 +10,11 @@
    - **Link**: set `LinkTo` to another actor for a teleporter, ladder or transition; `bLinkOneWay` makes it one way.
    - **Variant prop**: set `Variant` to `group.option` (for example `crates.left`). The prop's actor is left out of sampling and its collision becomes that option; Adari checks the rules for every combination.
 3. Set the volume's **RulesFile** (relative to the project) or write rules inline in **RulesJson**.
-4. Run `Adari.Check` in the console, or call **Check Volume** / **Check All** from Blueprint or Python.
+4. Run `Adari.Check` in the console, or call **Check Volume** / **Check All** from Blueprint or Python. `Adari.Check shot` also saves a viewport screenshot a second later (Saved/Screenshots).
 
-Failing cells are drawn red (warnings amber) and counterexample paths orange for `DrawSeconds`. Reports go to `Saved/Adari/<volume>/`: `report.txt`, `report.json`, `report.sarif`, `overlay.png`, and `map.adari.json`, the sampled level, which `adari check` can check again outside the engine.
+To try it out without building anything, run `Adari.Demo` in an open level (optionally `Adari.Demo x y z`): it builds a 10 x 10 m room with an inner wall, a 1 m gap, a crate that one variant places in the gap, entry and exit markers and a volume with two rules, and points the viewport down at it. Then run `Adari.Check`: the side beyond the wall is drawn red, because in the `props=crate` variant it cannot be reached.
+
+Failing cells are drawn as red line boxes (warnings amber) and counterexample paths as orange lines for `DrawSeconds`; turn on Realtime in the viewport if they do not appear. Reports go to `Saved/Adari/<volume>/`: `report.txt`, `report.json`, `report.sarif`, `overlay.png`, and `map.adari.json`, the sampled level, which `adari check` can check again outside the engine.
 
 ## How a level is sampled
 
@@ -43,5 +45,5 @@ The tests build small levels from collision boxes (an open room, a wall that spl
 ## Not yet
 
 - Rotated volumes, several floors in one volume, and moving platforms.
-- An editor-mode overlay that stays on screen, and a Data Validation hook that runs on save.
+- An editor-mode overlay that stays on screen, and a Data Validation hook that runs on save. (Translucent solid debug boxes do not render in editor viewports, so cells are drawn as line boxes.)
 - Links that change floors within one volume.

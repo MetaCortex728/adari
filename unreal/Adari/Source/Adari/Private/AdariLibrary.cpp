@@ -60,7 +60,10 @@ namespace
 			for (int C : F.cells)
 			{
 				if (++Drawn > 2000) break;  // keep huge regions cheap to draw
-				DrawDebugSolidBox(World, S.CellCentre(C, 10.0), Half, Col.WithAlpha(110), false, Life);
+				// Line boxes: translucent solid debug boxes do not render in editor viewports.
+				const FVector Centre = S.CellCentre(C, 10.0);
+				DrawDebugBox(World, Centre, Half, Col, false, Life, 0, 3.0f);
+				DrawDebugLine(World, Centre - FVector(Half.X, Half.Y, 0), Centre + FVector(Half.X, Half.Y, 0), Col, false, Life, 0, 3.0f);
 			}
 			for (std::size_t K = 0; K + 1 < F.path.size(); ++K)
 			{
