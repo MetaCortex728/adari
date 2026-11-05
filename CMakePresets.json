@@ -1,0 +1,78 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "ADARI_BUILD_TESTS": "ON" }
+    },
+    {
+      "name": "ninja",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "ci",
+      "hidden": true,
+      "cacheVariables": { "ADARI_WARNINGS_AS_ERRORS": "ON" }
+    },
+    {
+      "name": "default",
+      "displayName": "GCC",
+      "inherits": "ninja",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++" }
+    },
+    {
+      "name": "clang",
+      "displayName": "Clang",
+      "inherits": "ninja",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "clang++" }
+    },
+    {
+      "name": "asan",
+      "displayName": "GCC with ASan and UBSan",
+      "inherits": "default",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "ADARI_SANITIZE": "ON" }
+    },
+    {
+      "name": "msvc",
+      "displayName": "Visual Studio (newest installed), x64",
+      "inherits": "base",
+      "architecture": { "value": "x64", "strategy": "set" }
+    },
+    { "name": "ci-default", "displayName": "CI: GCC", "inherits": ["ci", "default"] },
+    { "name": "ci-clang", "displayName": "CI: Clang", "inherits": ["ci", "clang"] },
+    { "name": "ci-asan", "displayName": "CI: GCC with ASan and UBSan", "inherits": ["ci", "asan"] },
+    { "name": "ci-msvc", "displayName": "CI: Visual Studio", "inherits": ["ci", "msvc"] }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "clang", "configurePreset": "clang" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "msvc", "configurePreset": "msvc", "configuration": "RelWithDebInfo" },
+    { "name": "ci-default", "configurePreset": "ci-default" },
+    { "name": "ci-clang", "configurePreset": "ci-clang" },
+    { "name": "ci-asan", "configurePreset": "ci-asan" },
+    { "name": "ci-msvc", "configurePreset": "ci-msvc", "configuration": "RelWithDebInfo" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "default", "inherits": "base", "configurePreset": "default" },
+    { "name": "clang", "inherits": "base", "configurePreset": "clang" },
+    { "name": "asan", "inherits": "base", "configurePreset": "asan" },
+    { "name": "msvc", "inherits": "base", "configurePreset": "msvc", "configuration": "RelWithDebInfo" },
+    { "name": "ci-default", "inherits": "base", "configurePreset": "ci-default" },
+    { "name": "ci-clang", "inherits": "base", "configurePreset": "ci-clang" },
+    { "name": "ci-asan", "inherits": "base", "configurePreset": "ci-asan" },
+    { "name": "ci-msvc", "inherits": "base", "configurePreset": "ci-msvc", "configuration": "RelWithDebInfo" }
+  ]
+}

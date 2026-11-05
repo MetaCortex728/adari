@@ -1,0 +1,28 @@
+# The courtyard after two edits: the right crate option now stands in front of
+# the gate, and a spawn moved away from cover. Adari should catch both.
+name courtyard-broken
+cell_size 1
+legend S point entry
+legend E point exit
+legend R point reward
+legend P point spawn
+legend c region cover
+legend B region boss
+legend D door boss_gate
+legend k region lane keep_clear
+legend 1 option crates.left
+legend 2 option crates.right
+group crates optional
+map
+########################
+#S.kkkkkkkkkkkkkkkk....#
+#..k..............k..P.#
+#..k..cc..........k....#
+#..k..cc..........k.cc.#
+#..kkkkkkkkkkkkkkkk....#
+#.....1................#
+#.........2....P.......#
+##########D#############
+#.........B............#
+#....R....B.........E..#
+########################

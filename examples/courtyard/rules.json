@@ -1,0 +1,15 @@
+{
+  "adari_rules": 1,
+  "rules": [
+    {"id": "exit-reachable", "template": "reachable", "from": "entry", "to": "exit", "radius": 0.4,
+     "description": "The exit can be reached from the entry with the gate open."},
+    {"id": "no-dead-pockets", "template": "no_isolated_walkable", "from": "entry", "min_cells": 2},
+    {"id": "run-length", "template": "path_length", "from": "entry", "to": "exit", "min": 20, "max": 60},
+    {"id": "boss-hidden", "template": "not_visible_until", "target": "boss", "from": "entry", "door": "boss_gate"},
+    {"id": "reward-in-view", "template": "visible_from", "target": "reward", "from": "boss", "severity": "warning"},
+    {"id": "spawn-cover", "template": "near", "subject": "spawn", "object": "cover", "distance": 4,
+     "severity": "warning"},
+    {"id": "lane-clear", "template": "clear_of", "region": "keep_clear", "blocker": "*"},
+    {"id": "no-softlock", "template": "no_softlock", "from": "entry", "to": "exit"}
+  ]
+}

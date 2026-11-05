@@ -1,0 +1,28 @@
+# A small combat room and the boss room behind it. Spawns need cover, the lane
+# around the arena must stay clear, and the boss stays hidden until the gate opens.
+name courtyard
+cell_size 1
+legend S point entry
+legend E point exit
+legend R point reward
+legend P point spawn
+legend c region cover
+legend B region boss
+legend D door boss_gate
+legend k region lane keep_clear
+legend 1 option crates.left
+legend 2 option crates.right
+group crates optional
+map
+########################
+#S.kkkkkkkkkkkkkkkk....#
+#..k..............k..P.#
+#..k..cc.P........k....#
+#..k..cc..........k.cc.#
+#..kkkkkkkkkkkkkkkk....#
+#.....1........2.......#
+#......................#
+##########D#############
+#.........B............#
+#....R....B.........E..#
+########################
