@@ -148,6 +148,42 @@ TEST_CASE("LDtk: IntGrid meanings and entities") {
     CHECK_THROWS_AS(parse_ldtk(ldtk, "p.ldtk", "", missing), std::runtime_error);
 }
 
+TEST_CASE("painted-map files: walk areas, footprints, covers, route and levels") {
+    const char* painted = R"({"schema":1,"maps":[
+      {"walk":[[[0,0],[1,0],[1,1],[0,1]]],
+       "objects":[{"id":"well","kind":"well","footprint":[[0.5,0.5],[0.6,0.5],[0.6,0.6],[0.5,0.6]],
+                   "movement":true,"combatSight":false},
+                  {"id":"hedge","kind":"hedge","footprint":[[0.1,0.1],[0.2,0.1],[0.2,0.2],[0.1,0.2]],
+                   "movement":false,"combatSight":true}],
+       "covers":[{"id":"roof","anchor":[0.3,0.3],"groundSlope":0,"polygon":[[0.3,0.2],[0.4,0.2],[0.4,0.3],[0.3,0.3]]}],
+       "route":[[0.05,0.9],[0.95,0.9]], "exit":[0.95,0.9], "destination":"Next",
+       "destinations":[{"name":"Old Well","point":[0.45,0.55]}], "boundaryTests":[{"id":"t"}]},
+      {"walk":[], "objects":[], "covers":[], "route":[], "exit":[0.5,0.5], "destinations":[]}]})";
+    const Map m = parse_painted(painted, "spatial.json");
+    CHECK(m.width == 384);
+    CHECK(m.height == 256);
+    CHECK(m.cell_size == doctest::Approx(16.0));
+    const int well = m.index(211, 140);   // inside 0.5..0.6 x 0.5..0.6
+    const int hedge = m.index(57, 38);    // inside 0.1..0.2
+    CHECK(m.walk[static_cast<std::size_t>(well)] == 0);
+    CHECK(m.sight[static_cast<std::size_t>(well)] == 0);
+    CHECK(m.walk[static_cast<std::size_t>(hedge)] == 1);
+    CHECK(m.sight[static_cast<std::size_t>(hedge)] == 1);
+    CHECK(select_points(m, "start").size() == 1);
+    CHECK(select_points(m, "exit").size() == 1);
+    CHECK(select_points(m, "old-well").size() == 1);
+    CHECK(select_regions(m, "cover").size() == 1);
+    CHECK(select_regions(m, "route").size() == 1);
+    CHECK(select_regions(m, "solid").size() == 1);
+    CHECK(m.notes.size() == 1);  // boundary tests not checked yet
+    CHECK(painted_levels(painted) == std::vector<std::string>{"map0", "map1"});
+    ReaderOptions second;
+    second.level = "map1";
+    CHECK(parse_painted(painted, "spatial.json", second).name == "map1 (Next)");
+    second.level = "7";
+    CHECK_THROWS_AS(parse_painted(painted, "spatial.json", second), std::runtime_error);
+}
+
 TEST_CASE("rasterize uses cell centres") {
     Map m;
     m.resize(4, 4);

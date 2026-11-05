@@ -10,9 +10,8 @@
 // Exit codes: 0 all error-level rules hold, 1 an error-level rule failed or
 // could not be checked, 2 bad arguments or unreadable input.
 #include <exception>
-#include <fstream>
 #include <iostream>
-#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -30,23 +29,10 @@ int usage(const char* msg = nullptr) {
                  "  adari inspect MAP [--level NAME] [--meaning NAME=MEANING]...\n"
                  "  adari templates\n"
                  "  adari version\n\n"
-                 "MAP: ASCII (.txt), Adari JSON, Tiled (.tmx, .tmj, or JSON), LDtk (.ldtk)\n"
+                 "MAP: ASCII (.txt), Adari JSON, Tiled (.tmx, .tmj, or JSON), LDtk (.ldtk), painted-map JSON\n"
                  "MEANING: wall, low (blocks walking only), sight (blocks sight only), floor;\n"
                  "         NAME is an LDtk IntGrid value identifier or a Tiled tile class\n";
     return 2;
-}
-
-bool is_ldtk(const std::string& path) {
-    const auto dot = path.find_last_of('.');
-    return dot != std::string::npos && path.substr(dot) == ".ldtk";
-}
-
-std::string slurp(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) throw std::runtime_error("cannot open '" + path + "'");
-    std::stringstream ss;
-    ss << in.rdbuf();
-    return ss.str();
 }
 
 // Adds "-LEVEL" before the extension: out.json -> out-Level_1.json.
@@ -117,8 +103,9 @@ int main(int argc, char** argv) {
 
     try {
         std::vector<std::string> levels = {reader.level};
-        if (is_ldtk(map_path) && (all_levels || cmd == "inspect")) {
-            const auto names = adari::ldtk_levels(slurp(map_path));
+        if (all_levels || cmd == "inspect") {
+            const auto names = adari::list_levels(map_path);
+            if (all_levels && names.empty()) throw std::runtime_error(map_path + " holds a single map; --all-levels needs LDtk or a painted-map file");
             if (cmd == "inspect" && reader.level.empty() && names.size() > 1) {
                 std::cout << "levels:";
                 for (const auto& n : names) std::cout << " " << n;

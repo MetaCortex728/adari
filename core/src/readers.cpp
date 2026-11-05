@@ -1073,7 +1073,166 @@ Map parse_ldtk(const std::string& text, const std::string& file, const std::stri
     }
 }
 
+// ---------------------------------------------------------------- painted
+
+namespace {
+
+constexpr int kPaintedW = 384;
+constexpr int kPaintedH = 256;
+
+std::vector<std::pair<double, double>> norm_poly(const json& pts) {
+    std::vector<std::pair<double, double>> out;
+    for (const auto& p : pts)
+        if (p.is_array() && p.size() >= 2) out.emplace_back(p[0].get<double>() * kPaintedW, p[1].get<double>() * kPaintedH);
+    return out;
+}
+
+// Cells a polyline passes through (sampled at quarter-cell steps).
+std::vector<int> polyline_cells(const Map& map, const std::vector<std::pair<double, double>>& line) {
+    std::vector<int> out;
+    for (std::size_t i = 0; i + 1 < line.size(); ++i) {
+        const auto [x0, y0] = line[i];
+        const auto [x1, y1] = line[i + 1];
+        const double len = std::hypot(x1 - x0, y1 - y0);
+        const int steps = std::max(1, static_cast<int>(std::ceil(len * 4)));
+        for (int k = 0; k <= steps; ++k) {
+            const double t = static_cast<double>(k) / steps;
+            const int x = static_cast<int>(std::floor(x0 + (x1 - x0) * t));
+            const int y = static_cast<int>(std::floor(y0 + (y1 - y0) * t));
+            if (map.inside(x, y)) out.push_back(map.index(x, y));
+        }
+    }
+    dedupe(out);
+    return out;
+}
+
+std::string slug(const std::string& s) {
+    std::string out;
+    for (char c : lower(s)) {
+        if (std::isalnum(static_cast<unsigned char>(c))) out += c;
+        else if (!out.empty() && out.back() != '-') out += '-';
+    }
+    while (!out.empty() && out.back() == '-') out.pop_back();
+    return out;
+}
+
+}  // namespace
+
+std::vector<std::string> painted_levels(const std::string& text) {
+    const json j = json::parse(text);
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < j.value("maps", json::array()).size(); ++i) out.push_back("map" + std::to_string(i));
+    return out;
+}
+
+Map parse_painted(const std::string& text, const std::string& file, const ReaderOptions& opt) {
+    json j;
+    try {
+        j = json::parse(text);
+    } catch (const json::parse_error& e) {
+        fail(file, std::string("not valid JSON: ") + e.what());
+    }
+    const json maps = j.value("maps", json::array());
+    if (maps.empty()) fail(file, "no maps");
+    std::size_t index = 0;
+    if (!opt.level.empty()) {
+        std::string l = opt.level;
+        if (l.rfind("map", 0) == 0) l = l.substr(3);
+        try {
+            index = static_cast<std::size_t>(std::stoul(l));
+        } catch (...) {
+            fail(file, "level must be an index or mapN, not '" + opt.level + "'");
+        }
+        if (index >= maps.size()) fail(file, "no map " + opt.level + " (the file has " + std::to_string(maps.size()) + ")");
+    }
+    const json& m = maps[index];
+    Map map;
+    map.source_file = file;
+    map.name = "map" + std::to_string(index);
+    if (index > 0) {
+        const std::string prev = s(maps[index - 1], "destination");
+        if (!prev.empty()) map.name += " (" + prev + ")";
+    }
+    map.resize(kPaintedW, kPaintedH);
+    map.cell_size = 16.0;
+    std::fill(map.walk.begin(), map.walk.end(), 0);
+    try {
+        for (const auto& poly : m.value("walk", json::array()))
+            for (int c : rasterize(map, norm_poly(poly))) map.walk[static_cast<std::size_t>(c)] = 1;
+
+        for (const auto& o : m.value("objects", json::array())) {
+            const std::vector<int> cells = rasterize(map, norm_poly(o.value("footprint", json::array())));
+            const bool moves = b(o, "movement", true);
+            const bool sight = b(o, "combatSight", false);
+            for (int c : cells) {
+                if (moves) map.walk[static_cast<std::size_t>(c)] = 0;
+                if (sight) map.sight[static_cast<std::size_t>(c)] = 1;
+            }
+            Region r;
+            r.name = s(o, "id");
+            r.tags = {"object"};
+            if (!s(o, "kind").empty()) r.tags.push_back(s(o, "kind"));
+            if (moves) r.tags.push_back("solid");
+            if (sight) r.tags.push_back("sight_blocker");
+            r.cells = cells;
+            map.regions.push_back(r);
+        }
+        for (const auto& c : m.value("covers", json::array())) {
+            Region r;
+            r.name = s(c, "id");
+            r.tags = {"cover", "foreground"};
+            r.cells = rasterize(map, norm_poly(c.value("polygon", json::array())));
+            map.regions.push_back(r);
+        }
+        std::vector<std::pair<double, double>> route;
+        for (const auto& p : m.value("route", json::array()))
+            if (p.is_array() && p.size() >= 2) route.emplace_back(p[0].get<double>() * kPaintedW, p[1].get<double>() * kPaintedH);
+        if (!route.empty()) {
+            map.points.push_back(Point{"start", {"start", "entry"}, route.front().first, route.front().second});
+            Region r;
+            r.name = "route";
+            r.tags = {"route"};
+            r.cells = polyline_cells(map, route);
+            map.regions.push_back(r);
+        }
+        const json exit = m.value("exit", json());
+        if (exit.is_array() && exit.size() >= 2)
+            map.points.push_back(Point{"exit", {"exit"}, exit[0].get<double>() * kPaintedW, exit[1].get<double>() * kPaintedH});
+        for (const auto& dst : m.value("destinations", json::array())) {
+            const json p = dst.value("point", json());
+            if (!p.is_array() || p.size() < 2) continue;
+            const std::string name = s(dst, "name");
+            std::vector<std::string> tags = {"destination"};
+            if (!slug(name).empty()) tags.push_back(slug(name));
+            map.points.push_back(Point{name, tags, p[0].get<double>() * kPaintedW, p[1].get<double>() * kPaintedH});
+        }
+        const std::size_t tests = m.value("boundaryTests", json::array()).size();
+        if (tests)
+            map.notes.push_back(std::to_string(tests) + " boundary tests in the file are not checked yet");
+    } catch (const json::exception& e) {
+        fail(file, std::string("unexpected painted-map data: ") + e.what());
+    }
+    finish(map, file);
+    return map;
+}
+
 // ----------------------------------------------------------------- loader
+
+namespace {
+bool is_painted(const std::string& text) {
+    return text.find("\"maps\"") != std::string::npos && text.find("\"covers\"") != std::string::npos &&
+           text.find("\"walk\"") != std::string::npos;
+}
+}  // namespace
+
+std::vector<std::string> list_levels(const std::string& path) {
+    const std::string text = read_file(path);
+    const auto dot = path.find_last_of('.');
+    const std::string ext = lower(dot == std::string::npos ? std::string() : path.substr(dot));
+    if (ext == ".ldtk" || (ext == ".json" && text.find("\"jsonVersion\"") != std::string::npos)) return ldtk_levels(text);
+    if (ext == ".json" && is_painted(text)) return painted_levels(text);
+    return {};
+}
 
 Map load_map(const std::string& path, const ReaderOptions& opt) {
     const std::string text = read_file(path);
@@ -1086,6 +1245,7 @@ Map load_map(const std::string& path, const ReaderOptions& opt) {
     if (ext == ".ldtk") return parse_ldtk(text, path, dir, opt);
     if (ext == ".json") {
         if (text.find("\"adari_map\"") != std::string::npos) return parse_native(text, path);
+        if (is_painted(text)) return parse_painted(text, path, opt);
         if (text.find("\"tiledversion\"") != std::string::npos) return parse_tiled(text, path, dir, opt);
         if (text.find("\"jsonVersion\"") != std::string::npos) return parse_ldtk(text, path, dir, opt);
     }

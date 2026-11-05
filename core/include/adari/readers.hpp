@@ -59,6 +59,19 @@ Map parse_ldtk(const std::string& json_text, const std::string& file_name,
 // Level identifiers of an LDtk project, in file order.
 std::vector<std::string> ldtk_levels(const std::string& json_text);
 
+// Painted-map spatial files: one JSON with several maps, each describing the
+// gameplay layer over a painted background in coordinates normalized to the
+// painting (0..1). Walk areas, object footprints (blocking movement and/or
+// sight), foreground cover polygons, a route, an exit and named destinations.
+// The painting is sampled on a 384 x 256 grid (3:2); cell_size is 16, so world
+// units are pixels of a 6144 x 4096 painting. options.level selects a map by
+// index ("0") or name ("map0"); empty means the first.
+Map parse_painted(const std::string& json_text, const std::string& file_name, const ReaderOptions& options = {});
+std::vector<std::string> painted_levels(const std::string& json_text);
+
+// Levels in a multi-level file (LDtk or painted); empty for single-map files.
+std::vector<std::string> list_levels(const std::string& path);
+
 // Picks a reader from the extension and contents.
 Map load_map(const std::string& path, const ReaderOptions& options = {});
 
