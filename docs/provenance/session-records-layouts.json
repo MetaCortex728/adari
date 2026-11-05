@@ -1,0 +1,204 @@
+{
+  "classification": "observed local session metadata; hashes reconstructed from patch text",
+  "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+  "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+  "segment_first_utc": "2026-10-27T08:53:28.067Z",
+  "segment_last_utc": "2026-10-29T11:34:54.799Z",
+  "files": [
+    {
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "current_hash": "6db4b38d21f6b0a9c2f4219f132f69a6ab2d77115663daaa7797b17e1f7eb47d",
+      "last_replayed_hash": "6db4b38d21f6b0a9c2f4219f132f69a6ab2d77115663daaa7797b17e1f7eb47d"
+    },
+    {
+      "file": "exports/byeokrando-harbor-quarter-r2/build_map.py",
+      "current_hash": "7e1c6bdd61bdfe6e0286a35a4a27f00abf495f8e0df25dc29a2eb9f889bb06ad",
+      "last_replayed_hash": "7e1c6bdd61bdfe6e0286a35a4a27f00abf495f8e0df25dc29a2eb9f889bb06ad"
+    },
+    {
+      "file": "exports/dan-main-loop-maps-v2/build_layouts.py",
+      "current_hash": "7a3c9b429d12f34ac0cd9b3b47f4a1fff2a203a903dbe4b89c13e677d1c61cbe",
+      "last_replayed_hash": "7a3c9b429d12f34ac0cd9b3b47f4a1fff2a203a903dbe4b89c13e677d1c61cbe"
+    }
+  ],
+  "writes": [
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1468,
+      "timestamp": "2026-10-28T12:06:26.622Z",
+      "call_id": "call_b2eaa5cec9b84e71970acd5fd7a2843c",
+      "type": "patch",
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "operation": "Add",
+      "replayed_hash": "4c8151cd49482bbcf4e1b2b95f7d9f16873358c4387651d00665a390d4ddff29",
+      "output_line": 1471,
+      "output_time": "2026-10-28T12:06:37.575Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1490,
+      "timestamp": "2026-10-28T12:07:51.260Z",
+      "call_id": "call_ce0f4219d20844b29decab719c5ee3d8",
+      "type": "patch",
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "operation": "Update",
+      "replayed_hash": "48fc7117b1ad796a3c5d418a5590b6efc69e41510c1567e2dc9d0d14cb898eaf",
+      "output_line": 1493,
+      "output_time": "2026-10-28T12:08:01.816Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1506,
+      "timestamp": "2026-10-28T12:09:17.808Z",
+      "call_id": "call_dbcedd26e8b4428596836e5d473caf22",
+      "type": "patch",
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "operation": "Update",
+      "replayed_hash": "fcd561255324a604cf609354daffa1fbd2326669ec77db44272347fb8a8fed9f",
+      "output_line": 1509,
+      "output_time": "2026-10-28T12:09:28.318Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1555,
+      "timestamp": "2026-10-28T12:15:04.420Z",
+      "call_id": "call_9ed1a22c3c244bf5a5cb8a8fea966e14",
+      "type": "patch",
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "operation": "Update",
+      "replayed_hash": "ef68e011e19348c7d7414303f5c91455189a61b75588e06d51768c8c9129f887",
+      "output_line": 1559,
+      "output_time": "2026-10-28T12:15:05.320Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1563,
+      "timestamp": "2026-10-28T12:16:01.722Z",
+      "call_id": "call_99d3c0b39ad742899b95bef654843821",
+      "type": "patch",
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "operation": "Update",
+      "replayed_hash": "6db4b38d21f6b0a9c2f4219f132f69a6ab2d77115663daaa7797b17e1f7eb47d",
+      "output_line": 1567,
+      "output_time": "2026-10-28T12:16:12.880Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1773,
+      "timestamp": "2026-10-28T12:50:11.698Z",
+      "call_id": "call_913b597289074295b810ad0d74324ca4",
+      "type": "patch",
+      "file": "exports/byeokrando-harbor-quarter-r2/build_map.py",
+      "operation": "Add",
+      "replayed_hash": "9a40c354f91935dd015f60c6860694df7cef08214a22eec46a392b1326205675",
+      "output_line": 1777,
+      "output_time": "2026-10-28T12:50:14.864Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1789,
+      "timestamp": "2026-10-28T12:50:43.543Z",
+      "call_id": "call_5352604dcbd2440ea349e1b689008cb4",
+      "type": "patch",
+      "file": "exports/byeokrando-harbor-quarter-r2/build_map.py",
+      "operation": "Update",
+      "replayed_hash": "7e1c6bdd61bdfe6e0286a35a4a27f00abf495f8e0df25dc29a2eb9f889bb06ad",
+      "output_line": 1792,
+      "output_time": "2026-10-28T12:50:54.057Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 2019,
+      "timestamp": "2026-10-28T13:21:21.888Z",
+      "call_id": "call_493e388c36074d13b19f35fcbec4281e",
+      "type": "patch",
+      "file": "exports/dan-main-loop-maps-v2/build_layouts.py",
+      "operation": "Add",
+      "replayed_hash": "6c75b64eb895fd6108647e8c0904d3196f2036d77514c068d2bb03823bc85c9d",
+      "output_line": 2022,
+      "output_time": "2026-10-28T13:21:32.868Z",
+      "result": "recorded patch; see independent replay comparison"
+    },
+    {
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 2042,
+      "timestamp": "2026-10-28T13:22:27.318Z",
+      "call_id": "call_33aca6f387af4c94871a365b98fe7653",
+      "type": "patch",
+      "file": "exports/dan-main-loop-maps-v2/build_layouts.py",
+      "operation": "Update",
+      "replayed_hash": "7a3c9b429d12f34ac0cd9b3b47f4a1fff2a203a903dbe4b89c13e677d1c61cbe",
+      "output_line": 2047,
+      "output_time": "2026-10-28T13:22:43.193Z",
+      "result": "recorded patch; see independent replay comparison"
+    }
+  ],
+  "runs": [
+    {
+      "file": "exports/byeokrando-camp-full-map/build_map.py",
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1517,
+      "timestamp": "2026-10-28T12:09:40.679Z",
+      "call_id": "call_f374cbe1df634cc3a8e2f1e7d4d10540",
+      "replayed_hash": null,
+      "result": "Blender exit 0; saved Byeokrando_Camp.blend and layout-render.png; CAMP_DESIGN_DONE 146 objects."
+    },
+    {
+      "file": "exports/byeokrando-harbor-quarter-r2/build_map.py",
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1801,
+      "timestamp": "2026-10-28T12:53:21.779Z",
+      "call_id": "call_0d4c6e100a9d4b10ac829a5699975bd9",
+      "replayed_hash": null,
+      "result": "Blender exit 0; saved harbour .blend and layout-render.png; directory output lists map-layout.json."
+    },
+    {
+      "file": "exports/byeokrando-harbor-quarter-r2/build_map.py",
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 1877,
+      "timestamp": "2026-10-28T13:04:05.351Z",
+      "call_id": "call_f94bdc081d784c2a889792ca4580740e",
+      "replayed_hash": null,
+      "result": "Offline validation PASS: 8 places, 4 routes and 1344 centreline samples; 0.35 m clearance from listed rectangular footprints, not full-width or engine collision."
+    },
+    {
+      "file": "exports/dan-main-loop-maps-v2/build_layouts.py",
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 2032,
+      "timestamp": "2026-10-28T13:21:56.026Z",
+      "call_id": "call_8669f3ba687c4355bc243fec498033ec",
+      "replayed_hash": null,
+      "result": "Blender exit 0; output names all four .blend files and layout renders."
+    },
+    {
+      "file": "exports/dan-main-loop-maps-v2/build_layouts.py",
+      "session": "01a13efd-4a4b-7283-a42c-728222aa7224",
+      "segment": "rollout-2026-10-27T17-53-27-01a13efd-4a4b-7283-a42c-728222aa7224_01a17c90-8329-7071-8384-9a59f3bb9e83.jsonl",
+      "line": 2086,
+      "timestamp": "2026-10-28T13:26:17.037Z",
+      "call_id": "call_34cbe9114a9e495cb984b4aeb715c93e",
+      "replayed_hash": null,
+      "result": "Repeat Blender exit 0; output names four .blend files and final layout PNG."
+    }
+  ]
+}

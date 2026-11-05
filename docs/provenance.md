@@ -1,10 +1,24 @@
 # Provenance
 
-Adari's code is new: this repository starts on 5 November 2026, after the programme invitation that prompted publishing it (29 October 2026, 19:30 UTC). What it continues is a problem and an approach that Han worked out in October 2026 for the painted maps of his own Unreal Engine 5.8 game, with OpenAI Codex as a coding assistant and without version control: a hand-authored spatial layer over each painting (walk areas, object footprints, covers, sight blockers, routes), a design that separates three meanings of blocking (movement, combat sight, camera cover), and checks that kept the layer consistent with the art (a grid reachability checker, boundary QA runs in the engine, a review overlay, engine navigation and its tests). Adari generalises those checks into rules any designer can write, for maps from several editors.
+Adari's code is new: this repository starts on 5 November 2026, after the programme invitation that prompted publishing it (29 October 2026, 19:30 UTC). What it continues is a problem and an approach that Han worked out in October 2026 for the painted maps of his own Unreal Engine 5.8 game, with OpenAI Codex as a coding assistant and without version control: map layouts built in Blender (ground, paths, boundaries, routes) with an offline check of route clearance, then a hand-authored spatial layer over each painting (walk areas, object footprints, covers, sight blockers, routes), a design that separates three meanings of blocking (movement, combat sight, camera cover), and checks that kept the layer consistent with the art (a grid reachability checker, boundary QA runs in the engine, a review overlay, engine navigation and its tests). Adari generalises those checks into rules any designer can write, for maps from several editors.
 
 This page lists the evidence for that earlier work, says what kind of evidence each item is, and what it does and does not show. All times are UTC.
 
-## The October files
+## The layouts (28 October, from 12:06)
+
+Three Blender scripts laid out the maps before their paintings existed: a full camp map, a harbour quarter of individually composed structures with footprints, and the four main-loop map layouts. A validation run of the harbour quarter checked its routes against the structures' footprints, an early form of the reachability-with-clearance check that Adari now runs for any map.
+
+| File | First recorded write | Last recorded write | Replay vs the current file | SHA-256 now |
+|---|---|---|---|---|
+| `exports/byeokrando-camp-full-map/build_map.py` | 2026-10-28 12:06:26 | 2026-10-28 12:16:01 | same SHA-256 | `6db4b38d21f6b0a9c2f4219f132f69a6ab2d77115663daaa7797b17e1f7eb47d` |
+| `exports/byeokrando-harbor-quarter-r2/build_map.py` | 2026-10-28 12:50:11 | 2026-10-28 12:50:43 | same SHA-256 | `7e1c6bdd61bdfe6e0286a35a4a27f00abf495f8e0df25dc29a2eb9f889bb06ad` |
+| `exports/dan-main-loop-maps-v2/build_layouts.py` | 2026-10-28 13:21:21 | 2026-10-28 13:22:27 | same SHA-256 | `7a3c9b429d12f34ac0cd9b3b47f4a1fff2a203a903dbe4b89c13e677d1c61cbe` |
+
+Recorded runs, from the same session (`01a13efd-4a4b-7283-a42c-728222aa7224`): Blender built the camp (12:09:40, 146 objects), the harbour quarter (12:53:21) and the four main-loop layouts (13:21:56, again 13:26:17), each with exit code 0. At 13:04:05 the harbour validation passed: 8 places, 4 routes and 1,344 centre-line samples, each at least 0.35 m from the listed rectangular footprints (not full-width or engine collision). [`provenance/session-records-layouts.json`](provenance/session-records-layouts.json) lists these writes and runs with line numbers and call ids, without source code, conversation text or local paths.
+
+The records also show how the layouts led to the spatial layer. Han narrowed the camp to one part of the port (12:19) and asked for a multinational, multicultural scene (13:09); at 14:18 he asked that walkable and blocked ground be distinguishable at a glance. The assistant then checked each route against the paintings, found paths the paintings showed as open and a quay painted as accessible but disconnected in the movement data (14:22 to 14:28), and the first `spatial.json` edit followed at 14:31. The records do not show coordinates being exported automatically from Blender into `spatial.json`. An earlier visual export of five concept scenes (09:46) exists but is not a layout or a check.
+
+## The spatial layer and its checks (28 and 29 October, from 14:31)
 
 Paths are relative to the game folder. Times and hashes are the filesystem's, read on 5 November 2026; they are local and can be changed, so they are supporting evidence, not proof. None of these files is copied into this repository; Adari reimplements the ideas in C++.
 
@@ -57,7 +71,7 @@ OpenAI Codex keeps a local record of each session with every file edit and comma
 
 ## What this does and does not show
 
-- It shows, from the assistant's local session records and the files' current hashes, that the spatial layer, its design and its checks were written on 28 and 29 October 2026, before the invitation, and that most of the checker files are unchanged since.
+- It shows, from the assistant's local session records and the files' current hashes, that the map layouts (from 12:06 UTC on 28 October), a route clearance check (13:04), the spatial layer, its design and its checks were written on 28 and 29 October 2026, before the invitation, and that the layout scripts and most of the checker files are unchanged since.
 - It does not show a server-certified date: no server-side record was queried, and local records and file times can be changed.
 - It does not show that Adari's code existed before the invitation. Adari is new code written from 5 November 2026; it continues the October problem and approach, not the October files.
-- No earlier map-specific collision checker (before 28 October) was found in the examined records; earlier animation-loop boundary files are not map checks. The search covered the identified session family, not every chat.
+- No map-specific layout or collision check earlier than 28 October 12:06 UTC was found in the examined records; earlier animation-loop boundary files are not map checks. The search covered the identified session family, not every chat.
