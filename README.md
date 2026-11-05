@@ -55,6 +55,7 @@ adari version
 - [Rules and templates](docs/rules.md)
 - [Map formats](docs/formats.md)
 - [Unreal plugin](docs/unreal.md)
+- [Provenance](docs/provenance.md): the October 2026 work Adari continues
 - [Example](examples/courtyard)
 
 ## Licence
