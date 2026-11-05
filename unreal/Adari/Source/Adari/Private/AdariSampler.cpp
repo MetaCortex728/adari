@@ -224,6 +224,24 @@ bool AdariSampleVolume(const AAdariVolume& Volume, FAdariSample& Out, FString& E
 		if (!R.cells.empty()) Map.regions.push_back(std::move(R));
 	}
 
+	// Links from markers to other actors.
+	auto CellOf = [&](const FVector& P) {
+		const int32 X = FMath::FloorToInt((P.X - Box.Min.X) / Cell);
+		const int32 Y = FMath::FloorToInt((P.Y - Box.Min.Y) / Cell);
+		return Map.inside(X, Y) ? Map.index(X, Y) : -1;
+	};
+	for (const FMarkerInfo& Info : Markers)
+	{
+		const AActor* Target = Info.Marker->LinkTo.Get();
+		if (!Target) continue;
+		const int A = CellOf(Info.Marker->GetComponentLocation());
+		const int B = CellOf(Target->GetActorLocation());
+		if (A < 0 || B < 0 || A == B) continue;
+		const std::string Name = AdariConvert::Std(ActorName(Info.Owner) + TEXT(" -> ") + ActorName(Target));
+		Map.links.push_back(adari::Link{A, B, Name});
+		if (!Info.Marker->bLinkOneWay) Map.links.push_back(adari::Link{B, A, Name});
+	}
+
 	// Actor tags such as "adari:entry" are points at the actor's location.
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{

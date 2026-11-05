@@ -44,9 +44,9 @@ Unreal is the only engine front end for now (decided 2026-11-05); Godot and Unit
 - Done: Unreal 5.8 plugin with a sampling volume, markers (tags, doors, variant props), collision or navmesh sampling with step height and sight, `Adari.Check`, debug drawing, reports and Adari JSON export, headless automation tests.
 - Done: TMX and compressed tile data, LDtk fixes found on the official samples, `adari inspect`, `--all-levels`, reader meanings, painted-map spatial JSON.
 - Unreal next: a persistent editor-mode overlay, a Data Validation hook on save, rotated volumes and several floors.
-- Links between distant cells: teleporters, ladders, level transitions (the LDtk Entities sample's exit room is reachable only by teleporter).
+- Done: links (teleporters, ladders) in every reader and the Unreal markers; the LDtk Entities sample now passes through its teleporters.
 - Boundary tests from painted-map files (start, direction, expected stop box).
-- Rule scopes: limit a rule to a region, so decorative floor outside the play space is not reported.
+- Done: rule scopes (`within`).
 - Isometric and staggered Tiled maps; Tiled flip bits applied to per-tile collision.
 - Directed edges and one-way moves (RPG Maker passability, ledges, drops); softlock detection using forward, backward and sink labels.
 - Platformer movement as templates compiled from physics constants; ability-gated reachability by sphere search.

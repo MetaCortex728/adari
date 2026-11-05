@@ -31,6 +31,7 @@ struct Rule {
     std::string object;   // selector
     std::string region;   // selector
     std::string blocker;  // selector, matched against variant options and regions
+    std::string within;   // scope: when set, cells outside it are not walkable for this rule
 
     double radius = 0.0;        // agent radius, world units
     double min = -1.0;          // path length lower bound, world units (-1 = none)

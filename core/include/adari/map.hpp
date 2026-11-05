@@ -55,6 +55,14 @@ struct VariantGroup {
     std::size_t choices() const { return options.size() + (optional ? 1u : 0u); }
 };
 
+// A move between two cells that are not neighbours: a teleporter, a ladder,
+// a level transition. Directed; a two-way link is two links.
+struct Link {
+    int from = 0;  // cell index
+    int to = 0;    // cell index
+    std::string name;
+};
+
 // Where a reader found something, so reports can point back into the source
 // file. line and column are 1-based; zero means unknown.
 struct SourceRef {
@@ -77,6 +85,7 @@ struct Map {
     std::vector<Point> points;
     std::vector<Region> regions;
     std::vector<VariantGroup> groups;
+    std::vector<Link> links;
 
     // For ASCII maps: the text line of row 0, so findings map to file lines.
     int ascii_first_line = 0;

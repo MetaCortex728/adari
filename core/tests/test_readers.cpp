@@ -184,6 +184,36 @@ TEST_CASE("painted-map files: walk areas, footprints, covers, route and levels")
     CHECK_THROWS_AS(parse_painted(painted, "spatial.json", second), std::runtime_error);
 }
 
+TEST_CASE("links from Tiled object references and LDtk entity references") {
+    const Map t = parse_tiled(R"({"orientation":"orthogonal","width":5,"height":1,"tilewidth":16,"tileheight":16,
+      "tilesets":[{"firstgid":1,"tiles":[]}],
+      "layers":[{"type":"tilelayer","width":5,"height":1,"data":[1,1,1,1,1]},
+        {"type":"objectgroup","objects":[
+          {"id":1,"name":"a","type":"tp","point":true,"x":8,"y":8,
+           "properties":[{"name":"link","type":"object","value":2}]},
+          {"id":2,"name":"b","type":"tp","point":true,"x":72,"y":8}]}]})",
+                                "l.tmj", "");
+    REQUIRE(t.links.size() == 2);
+    CHECK(t.links[0].from == t.index(0, 0));
+    CHECK(t.links[0].to == t.index(4, 0));
+
+    const Map l = parse_ldtk(R"({"jsonVersion":"1.5.3","defs":{"layers":[]},
+      "levels":[{"identifier":"L","layerInstances":[
+        {"__type":"Entities","entityInstances":[
+          {"__identifier":"Teleporter","iid":"A","px":[8,8],"width":16,"height":16,"__pivot":[0.5,0.5],
+           "fieldInstances":[{"__identifier":"destination","__value":{"entityIid":"B"}}]},
+          {"__identifier":"Teleporter","iid":"B","px":[72,8],"width":16,"height":16,"__pivot":[0.5,0.5],
+           "fieldInstances":[{"__identifier":"destination","__value":{"entityIid":"elsewhere"}}]},
+          {"__identifier":"Button","iid":"C","px":[40,8],"width":16,"height":16,"__pivot":[0.5,0.5],
+           "fieldInstances":[{"__identifier":"targets","__value":[{"entityIid":"A"}]}]}]},
+        {"__type":"IntGrid","__cWid":5,"__cHei":1,"__gridSize":16,"intGridCsv":[0,0,0,0,0]}]}]})",
+                             "l.ldtk", "");
+    REQUIRE(l.links.size() == 1);  // A -> B; B points to another level; trigger lists are not moves
+    CHECK(l.links[0].from == l.index(0, 0));
+    CHECK(l.links[0].to == l.index(4, 0));
+    CHECK(l.notes.size() == 1);
+}
+
 TEST_CASE("rasterize uses cell centres") {
     Map m;
     m.resize(4, 4);

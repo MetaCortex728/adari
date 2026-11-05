@@ -204,6 +204,38 @@ TEST_CASE("variants: hiding rules use the bound with no optional blockers") {
     CHECK(r.findings[0].variant_text == "screen=none");
 }
 
+TEST_CASE("links: a teleporter joins rooms, a one-way link can trap") {
+    const std::string rooms = "legend T point tp_a\nlegend U point tp_b\nmap\n#########\n#S.T#U.E#\n#########\n";
+    const std::string rule = R"({"id":"r","template":"reachable","from":"entry","to":"exit"})";
+    CHECK(status(run(map_of(rooms), rule)) == Status::kFailed);
+    CHECK(status(run(map_of("link tp_a tp_b\n" + rooms), rule)) == Status::kPassed);
+    const Map m = map_of("link tp_a tp_b\n" + rooms);
+    CHECK(m.links.size() == 2);
+    // A one-way teleporter into a room without an exit is a softlock.
+    const Report soft = run(map_of("legend T point tp_a\nlegend U point tp_b\nlink tp_a > tp_b\n"
+                                   "map\n#########\n#S.TE#U.#\n#########\n"),
+                            R"({"id":"s","template":"no_softlock","from":"entry","to":"exit"})");
+    CHECK(status(soft) == Status::kFailed);
+    REQUIRE(soft.findings.size() == 1);
+    CHECK(soft.findings[0].cells.size() == 2);
+    CHECK_THROWS_AS(map_of("link tp_a nowhere\n" + rooms), std::runtime_error);
+}
+
+TEST_CASE("within limits a rule to a region") {
+    // Decorative floor outside the play area would be an isolated pocket.
+    const Map m = map_of("legend p region play\nmap\n#######\n#Sppp#.\n#######\n");
+    CHECK(status(run(m, R"({"id":"i","template":"no_isolated_walkable","from":"entry"})")) == Status::kFailed);
+    // The entry lies just outside the scope; like a target drawn in a wall, it
+    // counts from the scope cell beside it.
+    CHECK(status(run(m, R"({"id":"i","template":"no_isolated_walkable","from":"entry","within":"play"})")) ==
+          Status::kPassed);
+    const Map scoped = map_of("legend p region play\nlegend s point entry play\nmap\n#######\n#sppp#.\n#######\n");
+    CHECK(status(run(scoped, R"({"id":"i","template":"no_isolated_walkable","from":"entry","within":"play"})")) ==
+          Status::kPassed);
+    CHECK(status(run(scoped, R"({"id":"i","template":"no_isolated_walkable","from":"entry","within":"nope"})")) ==
+          Status::kNotChecked);
+}
+
 TEST_CASE("doors can be forced closed for movement rules") {
     const Map m = map_of("map\n#######\n#S.D.E#\n#######\n");
     CHECK(status(run(m, R"({"id":"r","template":"reachable","from":"entry","to":"exit"})")) == Status::kPassed);

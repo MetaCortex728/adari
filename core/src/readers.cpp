@@ -91,6 +91,25 @@ void set_optional(Map& map, const std::string& group, const std::string& file) {
     fail(file, "group '" + group + "' has no options");
 }
 
+// The cell under a position given in cell units, or -1 outside the map.
+int cell_at(const Map& map, double x, double y) {
+    const int cx = static_cast<int>(std::floor(x));
+    const int cy = static_cast<int>(std::floor(y));
+    return map.inside(cx, cy) ? map.index(cx, cy) : -1;
+}
+
+void add_link(Map& map, int from, int to, const std::string& name, bool oneway) {
+    if (from < 0 || to < 0 || from == to) return;
+    map.links.push_back(Link{from, to, name});
+    if (!oneway) map.links.push_back(Link{to, from, name});
+}
+
+const Point* point_named(const Map& map, const std::string& name) {
+    for (const Point& p : map.points)
+        if (p.name == name) return &p;
+    return nullptr;
+}
+
 void dedupe(std::vector<int>& v) {
     std::sort(v.begin(), v.end());
     v.erase(std::unique(v.begin(), v.end()), v.end());
@@ -150,6 +169,12 @@ Map parse_ascii(const std::string& text, const std::string& file) {
     };
     std::map<char, Legend> legend;
     std::vector<std::string> optional_groups;
+    struct PendingLink {
+        std::string a, b;
+        bool oneway;
+        int line;
+    };
+    std::vector<PendingLink> pending_links;
     std::vector<std::string> rows;
     Map map;
     map.name = file;
@@ -182,6 +207,9 @@ Map parse_ascii(const std::string& text, const std::string& file) {
             }
         } else if (words[0] == "group" && words.size() == 3 && words[2] == "optional") {
             optional_groups.push_back(words[1]);
+        } else if (words[0] == "link" && (words.size() == 3 || (words.size() == 4 && words[2] == ">"))) {
+            // link A B (both ways) or link A > B (one way), between point names
+            pending_links.push_back({words[1], words.back(), words.size() == 4, lineno});
         } else if (words[0] == "legend" && words.size() >= 4 && words[1].size() == 1) {
             Legend l;
             l.kind = words[2];
@@ -277,6 +305,12 @@ Map parse_ascii(const std::string& text, const std::string& file) {
         }
     }
     for (const auto& g : optional_groups) set_optional(map, g, file);
+    for (const auto& l : pending_links) {
+        const Point* a = point_named(map, l.a);
+        const Point* b = point_named(map, l.b);
+        if (!a || !b) fail(file, "link names a point that does not exist ('" + (a ? l.b : l.a) + "')", l.line);
+        add_link(map, cell_at(map, a->x, a->y), cell_at(map, b->x, b->y), l.a + (l.oneway ? " > " : " - ") + l.b, l.oneway);
+    }
     finish(map, file);
     return map;
 }
@@ -360,6 +394,16 @@ Map parse_native(const std::string& text, const std::string& file) {
             }
         if (j.contains("optional_groups"))
             for (const auto& g : j["optional_groups"]) set_optional(map, g.get<std::string>(), file);
+        // Links: ends are point names or [x, y] cells.
+        auto end_of = [&](const json& v) -> int {
+            if (v.is_array()) return cell_list(json::array({v})).front();
+            const Point* p = point_named(map, v.get<std::string>());
+            if (!p) fail(file, "link names a point that does not exist ('" + v.get<std::string>() + "')");
+            return cell_at(map, p->x, p->y);
+        };
+        if (j.contains("links"))
+            for (const auto& l : j["links"])
+                add_link(map, end_of(l.at("from")), end_of(l.at("to")), l.value("name", std::string("link")), l.value("oneway", true));
     } catch (const json::exception& e) {
         fail(file, std::string("bad points, regions or options: ") + e.what());
     }
@@ -684,6 +728,14 @@ Map tiled_from_json(const json& j, const std::string& file, const std::string& b
     }
 
     const std::vector<std::string> optional = csv(prop_str(j, "adari_optional_groups"));
+    std::map<long long, int> object_cell;  // object id -> cell
+    struct TiledLink {
+        long long from_id;
+        json target;  // object id (int) or point name (string)
+        bool oneway;
+        std::string name;
+    };
+    std::vector<TiledLink> tiled_links;
 
     auto handle_object = [&](const json& o) {
         if (b(o, "polyline")) return;  // open lines enclose no area
@@ -696,7 +748,14 @@ Map tiled_from_json(const json& j, const std::string& file, const std::string& b
         for (const auto& t : csv(prop_str(o, "adari_tags"))) tags.push_back(t);
         const std::string label = name.empty() ? (cls.empty() ? "object " + std::to_string(static_cast<int>(d(o, "id"))) : cls) : name;
 
+        const long long oid = static_cast<long long>(d(o, "id"));
+        {
+            const json link = prop(o, "link");
+            if (link.is_number() || (link.is_string() && !link.get<std::string>().empty()))
+                tiled_links.push_back({oid, link, prop_bool(o, "link_oneway", false), label});
+        }
         if (b(o, "point")) {
+            object_cell[oid] = cell_at(map, ox, oy);
             map.points.push_back(Point{label, tags, ox, oy});
             return;
         }
@@ -726,6 +785,14 @@ Map tiled_from_json(const json& j, const std::string& file, const std::string& b
         for (const auto& [lx, ly] : local)
             poly.emplace_back(ox + lx * std::cos(rot) - ly * std::sin(rot), oy + lx * std::sin(rot) + ly * std::cos(rot));
         const std::vector<int> cells = rasterize(map, poly);
+        {
+            double cx = 0, cy = 0;
+            for (const auto& [x, y] : poly) {
+                cx += x;
+                cy += y;
+            }
+            if (!poly.empty()) object_cell[oid] = cell_at(map, cx / static_cast<double>(poly.size()), cy / static_cast<double>(poly.size()));
+        }
 
         const std::string variant = prop_str(o, "variant");
         // A tile object is solid when its tile is (for example a crate tile
@@ -819,6 +886,19 @@ Map tiled_from_json(const json& j, const std::string& file, const std::string& b
             "no tile carries collision data (a 'solid' property, a wall class or collision shapes), so every "
             "tiled cell is floor; mark wall tiles in the tileset or pass --meaning CLASS=wall");
     for (const auto& g : optional) set_optional(map, g, file);
+    for (const TiledLink& l : tiled_links) {
+        int to = -1;
+        if (l.target.is_number()) {
+            const auto it = object_cell.find(l.target.get<long long>());
+            if (it == object_cell.end()) fail(file, "object '" + l.name + "' links to object " + std::to_string(l.target.get<long long>()) + ", which does not exist");
+            to = it->second;
+        } else {
+            const Point* p = point_named(map, l.target.get<std::string>());
+            if (!p) fail(file, "object '" + l.name + "' links to '" + l.target.get<std::string>() + "', which is not a point");
+            to = cell_at(map, p->x, p->y);
+        }
+        add_link(map, object_cell.count(l.from_id) ? object_cell[l.from_id] : -1, to, l.name, l.oneway);
+    }
     finish(map, file);
     return map;
 }
@@ -1037,6 +1117,19 @@ Map parse_ldtk(const std::string& text, const std::string& file, const std::stri
             }
         }
 
+        // Entity references that mean "this leads to that": a teleporter's
+        // destination, a ladder's target. Trigger lists ("targets") are not moves.
+        std::map<std::string, int> entity_cell;  // iid -> cell
+        struct LdtkLink {
+            std::string from_iid, to_iid, name;
+        };
+        std::vector<LdtkLink> ldtk_links;
+        auto is_move_field = [](const std::string& field_name) {
+            const std::string f = lower(field_name);
+            return f == "destination" || f == "target" || f == "link" || f == "teleport" || f == "teleport_to" || f == "to" ||
+                   f == "exit_to";
+        };
+
         for (const auto& li : layers) {
             if (s(li, "__type") != "Entities") continue;
             const double offx = d(li, "__pxTotalOffsetX") - ox0;
@@ -1058,6 +1151,12 @@ Map parse_ldtk(const std::string& text, const std::string& file, const std::stri
                 const double chh = h / grid;
                 const json name_field = field(e, "name");
                 const std::string name = name_field.is_string() ? name_field.get<std::string>() : id;
+                entity_cell[s(e, "iid")] = cell_at(map, left + cw / 2, top + chh / 2);
+                for (const auto& f : e.value("fieldInstances", json::array())) {
+                    const json v = f.value("__value", json());
+                    if (is_move_field(s(f, "__identifier")) && v.is_object() && !s(v, "entityIid").empty())
+                        ldtk_links.push_back({s(e, "iid"), s(v, "entityIid"), name});
+                }
                 const json variant = field(e, "variant");
                 const std::vector<std::pair<double, double>> poly = {
                     {left, top}, {left + cw, top}, {left + cw, top + chh}, {left, top + chh}};
@@ -1086,6 +1185,18 @@ Map parse_ldtk(const std::string& text, const std::string& file, const std::stri
                 }
             }
         }
+        std::size_t missing = 0;
+        for (const LdtkLink& l : ldtk_links) {
+            const auto a = entity_cell.find(l.from_iid);
+            const auto b = entity_cell.find(l.to_iid);
+            if (a == entity_cell.end() || b == entity_cell.end()) {
+                ++missing;  // the target is in another level
+                continue;
+            }
+            add_link(map, a->second, b->second, l.name, true);
+        }
+        if (missing)
+            map.notes.push_back(std::to_string(missing) + " entity links lead to other levels and are not followed");
         finish(map, file);
         return map;
     } catch (const json::exception& e) {

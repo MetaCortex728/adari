@@ -26,7 +26,7 @@ Stage 1 of the [roadmap](ROADMAP.md) and the first engine front end:
 - Readers for Tiled (`.tmx`, `.tmj`; CSV, base64, zlib, gzip), LDtk, painted-map spatial JSON, ASCII maps and Adari JSON. They have been run against the official LDtk and Tiled sample projects; `adari inspect` shows what a reader made of a map.
 - An [Unreal Engine 5.8 plugin](docs/unreal.md) that samples a level (collision or navmesh, step height, sight), checks it in the editor and draws failures.
 
-Platformer movement, links such as teleporters, isometric Tiled maps and art-against-collision checks come next.
+Platformer movement, isometric Tiled maps and art-against-collision checks come next.
 
 ## Build
 

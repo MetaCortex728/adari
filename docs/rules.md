@@ -21,6 +21,7 @@ Every rule has:
 | `severity` | `error` (default), `warning` or `note`. Only errors make `adari check` exit with 1 |
 | `description` | Free text, for people |
 | `doors` | Optional door states for this rule, e.g. `{"boss_gate": "closed"}`. Doors are open unless a rule closes them |
+| `within` | Optional scope selector: cells outside it are not walkable for this rule, so decorative floor outside the play area is not reported |
 
 ## Selectors
 
@@ -44,6 +45,8 @@ A selector that matches nothing is not a pass. The rule is reported as "not chec
 | `near` | `subject`, `object`, `distance` | Every `subject` has an `object` within `distance` (straight line, world units). Variant options tagged like `object` count when chosen |
 | `clear_of` | `region`, `blocker` | No variant option or region matching `blocker` covers a cell of `region` |
 | `no_softlock` | `from`, `to`, `radius` | Every cell you can reach from `from` can still reach `to` (matters with one-way cells) |
+
+Movement follows links too (teleporters, ladders, transitions; see the formats). A start or target drawn inside a wall, or just outside a rule's scope, counts from the open cell beside it; one that is open but too tight for the radius does not.
 
 Visibility runs from cell centre to cell centre and is blocked by any sight-blocking cell in between, including both cells beside a corner the line passes through exactly. Large cell sets are thinned to `options.sight_samples` cells (default 256) and the report says so.
 

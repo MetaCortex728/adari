@@ -7,6 +7,7 @@
 1. Place an **Adari Volume** around the area to check. Its top should sit just above the highest walkable floor and below the tops of walls; the box is read axis-aligned.
 2. Add **Adari Marker** components to actors that rules talk about, and give them tags: `entry`, `exit`, `spawn`, `cover`, `boss`. A Box marker covers an area; a Point marker is one spot. An actor tag such as `adari:entry` works as a point too.
    - **Door**: tick `bDoor`. The door's actor is left out of sampling, so it is open unless a rule closes it (`"doors": {"boss_gate": "closed"}`).
+   - **Link**: set `LinkTo` to another actor for a teleporter, ladder or transition; `bLinkOneWay` makes it one way.
    - **Variant prop**: set `Variant` to `group.option` (for example `crates.left`). The prop's actor is left out of sampling and its collision becomes that option; Adari checks the rules for every combination.
 3. Set the volume's **RulesFile** (relative to the project) or write rules inline in **RulesJson**.
 4. Run `Adari.Check` in the console, or call **Check Volume** / **Check All** from Blueprint or Python.
@@ -37,10 +38,10 @@ powershell -File unreal/adari-unreal.ps1            # build AdariSampleEditor, t
 powershell -File unreal/adari-unreal.ps1 -Mode Build
 ```
 
-The tests build small levels from collision boxes (an open room, a wall that splits it, a gap that fits a narrow agent but not a wide one, a variant crate in the gap, a step and a ledge) and check the sampled grid and the rule results, plus a round trip through Adari JSON.
+The tests build small levels from collision boxes (an open room, a wall that splits it, a gap that fits a narrow agent but not a wide one, a variant crate in the gap, a step and a ledge, a teleporter across a wall) and check the sampled grid and the rule results, plus a round trip through Adari JSON.
 
 ## Not yet
 
 - Rotated volumes, several floors in one volume, and moving platforms.
 - An editor-mode overlay that stays on screen, and a Data Validation hook that runs on save.
-- Links such as teleporters and ladders between distant cells.
+- Links that change floors within one volume.

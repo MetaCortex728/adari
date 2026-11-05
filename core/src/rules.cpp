@@ -165,6 +165,7 @@ RuleSet parse_rules(const std::string& json_text) {
         r.object = str(j, "object");
         r.region = str(j, "region");
         r.blocker = str(j, "blocker");
+        r.within = str(j, "within");
         r.radius = num(j, "radius", 0.0);
         r.min = num(j, "min", -1.0);
         r.max = num(j, "max", -1.0);
@@ -501,7 +502,15 @@ Outcome eval_softlock(const Map& map, const Rule& r, const State& s) {
 Outcome eval_once(const Map& map, const Rule& r, const Choice& choice, const Options& opt) {
     std::vector<DoorOverride> doors = r.doors;
     if (r.tmpl == "not_visible_until") doors.push_back({r.door, DoorMode::kClosed});
-    const State s = make_state(map, choice, doors);
+    State s = make_state(map, choice, doors);
+    if (!r.within.empty()) {
+        const std::vector<int> scope = select_cells(map, r.within);
+        if (scope.empty()) return nothing("within", r.within);
+        std::vector<std::uint8_t> in(map.size(), 0);
+        for (int c : scope) in[static_cast<std::size_t>(c)] = 1;
+        for (std::size_t i = 0; i < in.size(); ++i)
+            if (!in[i]) s.walk[i] = 0;
+    }
     if (r.tmpl == "reachable") return eval_reachable(map, r, s);
     if (r.tmpl == "no_isolated_walkable") return eval_isolated(map, r, s);
     if (r.tmpl == "path_length") return eval_path_length(map, r, s);

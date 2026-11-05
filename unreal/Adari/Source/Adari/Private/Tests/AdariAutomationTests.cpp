@@ -197,6 +197,25 @@ bool FAdariStepTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAdariLinkTest, "Adari.Sampling.Teleporter", AdariTests::Flags)
+bool FAdariLinkTest::RunTest(const FString&)
+{
+	// A wall splits the room; a teleporter pair joins the halves.
+	AdariTests::FLevel L;
+	L.Box(FVector(500, 500, 150), FVector(10, 500, 150));
+	L.Point(FVector(100, 500, 50), {TEXT("entry")});
+	L.Point(FVector(900, 500, 50), {TEXT("exit")});
+	UAdariMarkerComponent* Pad = L.Point(FVector(300, 300, 50), {TEXT("teleporter")});
+	UAdariMarkerComponent* Other = L.Point(FVector(700, 300, 50), {TEXT("teleporter")});
+	Pad->LinkTo = Other->GetOwner();
+	TestFalse(TEXT("The teleporter joins the two halves"), L.Check(AdariTests::ExitRule).bFailed);
+	FAdariSample S;
+	FString Error;
+	AdariSampleVolume(*L.Volume, S, Error);
+	TestEqual(TEXT("A two-way link"), static_cast<int32>(S.Map.links.size()), 2);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAdariJsonTest, "Adari.Export.RoundTrip", AdariTests::Flags)
 bool FAdariJsonTest::RunTest(const FString&)
 {

@@ -90,6 +90,8 @@ std::string validate(const Map& map) {
     };
     for (const Region& r : map.regions)
         if (bad(r.cells)) return "region '" + r.name + "' has a cell outside the map";
+    for (const Link& l : map.links)
+        if (l.from < 0 || l.from >= n || l.to < 0 || l.to >= n) return "link '" + l.name + "' has an end outside the map";
     for (const VariantGroup& g : map.groups) {
         if (g.options.empty()) return "variant group '" + g.name + "' has no options";
         for (const VariantOption& o : g.options)

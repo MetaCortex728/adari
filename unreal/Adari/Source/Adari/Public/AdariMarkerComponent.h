@@ -49,6 +49,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adari")
 	FString Variant;
 
+	/** A teleporter, ladder or transition: standing here can take the agent to this actor's location. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adari")
+	TSoftObjectPtr<AActor> LinkTo;
+
+	/** The link works in one direction only. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adari")
+	bool bLinkOneWay = false;
+
 	/** The variant group may also take no option at all. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adari", meta = (EditCondition = "Variant != \"\""))
 	bool bGroupCanBeEmpty = true;

@@ -97,6 +97,7 @@ std::string summarize(const Map& map) {
         os << "  tags:";
         for (const auto& [t, n] : rtags) os << " " << t << "(" << n << ")";
     }
+    os << "\n  links: " << map.links.size();
     os << "\n  variant groups: " << map.groups.size();
     for (const VariantGroup& g : map.groups) os << " " << g.name << "[" << g.options.size() << (g.optional ? "+none" : "") << "]";
     os << "\n";
@@ -144,6 +145,12 @@ std::string to_native_json(const Map& map) {
                                     {"block_sight_cells", cells(o.block_sight)}});
     }
     j["optional_groups"] = optional;
+    j["links"] = ordered_json::array();
+    for (const Link& l : map.links) {
+        const Cell a = map.cell(l.from);
+        const Cell b = map.cell(l.to);
+        j["links"].push_back({{"name", l.name}, {"from", {a.x, a.y}}, {"to", {b.x, b.y}}, {"oneway", true}});
+    }
     return j.dump(1) + "\n";
 }
 

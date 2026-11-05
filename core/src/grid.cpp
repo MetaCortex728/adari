@@ -93,6 +93,14 @@ void edt_2d(std::vector<double>& g, int w, int h) {
     }
 }
 
+// Links sorted by their start (or, backward, by their end) for lookup.
+std::vector<std::pair<int, int>> link_index(const Map& map, bool backward) {
+    std::vector<std::pair<int, int>> out;
+    for (const Link& l : map.links) out.emplace_back(backward ? l.to : l.from, backward ? l.from : l.to);
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
 }  // namespace
 
 std::vector<float> distance_field(const Map& map, const std::vector<int>& sources) {
@@ -164,6 +172,7 @@ std::vector<int> reach(const Map& map, const std::vector<std::uint8_t>& pass,
         dist[static_cast<std::size_t>(s)] = 0;
         q.push(s);
     }
+    const auto links = link_index(map, backward);
     while (!q.empty()) {
         const int c = q.front();
         q.pop();
@@ -176,6 +185,13 @@ std::vector<int> reach(const Map& map, const std::vector<std::uint8_t>& pass,
             if (dist[static_cast<std::size_t>(n)] != kUnreached) continue;
             const bool ok = backward ? step_allowed(map, pass, n, c) : step_allowed(map, pass, c, n);
             if (!ok) continue;
+            dist[static_cast<std::size_t>(n)] = dist[static_cast<std::size_t>(c)] + 1;
+            q.push(n);
+        }
+        for (auto it = std::lower_bound(links.begin(), links.end(), std::make_pair(c, -1));
+             it != links.end() && it->first == c; ++it) {
+            const int n = it->second;
+            if (!pass[static_cast<std::size_t>(n)] || dist[static_cast<std::size_t>(n)] != kUnreached) continue;
             dist[static_cast<std::size_t>(n)] = dist[static_cast<std::size_t>(c)] + 1;
             q.push(n);
         }
@@ -201,6 +217,7 @@ Path shortest_path(const Map& map, const std::vector<std::uint8_t>& pass,
         pq.push({0.0, s});
     }
     const double diag = std::sqrt(2.0);
+    const auto links = link_index(map, false);
     while (!pq.empty()) {
         const auto [d, c] = pq.top();
         pq.pop();
@@ -220,6 +237,18 @@ Path shortest_path(const Map& map, const std::vector<std::uint8_t>& pass,
             const int n = map.index(nx, ny);
             if (!step_allowed(map, pass, c, n)) continue;
             const double nd = d + (k < 4 ? 1.0 : diag);
+            if (nd < dist[static_cast<std::size_t>(n)]) {
+                dist[static_cast<std::size_t>(n)] = nd;
+                prev[static_cast<std::size_t>(n)] = c;
+                pq.push({nd, n});
+            }
+        }
+        // A link costs one cell of travel, wherever it leads.
+        for (auto it = std::lower_bound(links.begin(), links.end(), std::make_pair(c, -1));
+             it != links.end() && it->first == c; ++it) {
+            const int n = it->second;
+            if (!pass[static_cast<std::size_t>(n)]) continue;
+            const double nd = d + 1.0;
             if (nd < dist[static_cast<std::size_t>(n)]) {
                 dist[static_cast<std::size_t>(n)] = nd;
                 prev[static_cast<std::size_t>(n)] = c;
