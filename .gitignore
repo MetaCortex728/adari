@@ -5,3 +5,12 @@ __pycache__/
 compile_commands.json
 .cache/
 .vs/
+
+# Unreal plugin and sample project intermediates
+unreal/**/Binaries/
+unreal/**/Intermediate/
+unreal/**/Saved/
+unreal/**/DerivedDataCache/
+unreal/**/.vs/
+unreal/**/*.sln
+

@@ -16,11 +16,17 @@ $ adari check examples/courtyard/courtyard-broken.txt --rules examples/courtyard
   ...
 ```
 
-It sits between tools rather than replacing them. You keep editing in Tiled, LDtk or your engine; navigation at runtime stays in the engine; play-testing bots stay useful for what static checks cannot model. Adari adds the rule language, one spatial model across formats, and proof that a rule holds for every variant.
+It sits between tools rather than replacing them. You keep editing in Tiled, LDtk or Unreal; navigation at runtime stays in the engine; play-testing bots stay useful for what static checks cannot model. Adari adds the rule language, one spatial model across formats, and proof that a rule holds for every variant.
 
 ## Status
 
-Stage 1 of the [roadmap](ROADMAP.md): the C++17 core, the command-line tool, eight rule templates, variant checking, and readers for ASCII maps, Adari JSON, Tiled and LDtk. Engine front ends (Unreal, Godot, Unity), platformer movement and art-against-collision checks come next.
+Stage 1 of the [roadmap](ROADMAP.md) and the first engine front end:
+
+- The C++17 core and the command-line tool: eight rule templates, checking across every variant, text, JSON, SARIF and PNG reports.
+- Readers for Tiled (`.tmx`, `.tmj`; CSV, base64, zlib, gzip), LDtk, painted-map spatial JSON, ASCII maps and Adari JSON. They have been run against the official LDtk and Tiled sample projects; `adari inspect` shows what a reader made of a map.
+- An [Unreal Engine 5.8 plugin](docs/unreal.md) that samples a level (collision or navmesh, step height, sight), checks it in the editor and draws failures.
+
+Platformer movement, links such as teleporters, isometric Tiled maps and art-against-collision checks come next.
 
 ## Build
 
@@ -37,7 +43,9 @@ The binary is `build/<preset>/adari` (on Windows, `build/msvc/RelWithDebInfo/ada
 ## Use
 
 ```
-adari check MAP --rules RULES [--level NAME] [--json FILE] [--sarif FILE] [--overlay FILE.png]
+adari check MAP --rules RULES [--level NAME | --all-levels] [--meaning NAME=MEANING]...
+                [--json FILE] [--sarif FILE] [--overlay FILE.png]
+adari inspect MAP [--level NAME]
 adari templates
 adari version
 ```
@@ -46,6 +54,7 @@ adari version
 
 - [Rules and templates](docs/rules.md)
 - [Map formats](docs/formats.md)
+- [Unreal plugin](docs/unreal.md)
 - [Example](examples/courtyard)
 
 ## Licence

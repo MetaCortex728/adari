@@ -104,6 +104,49 @@ std::string summarize(const Map& map) {
     return os.str();
 }
 
+std::string to_native_json(const Map& map) {
+    ordered_json j;
+    j["adari_map"] = 1;
+    j["name"] = map.name;
+    j["cell_size"] = map.cell_size;
+    ordered_json rows = ordered_json::array();
+    for (int y = 0; y < map.height; ++y) {
+        std::string row;
+        for (int x = 0; x < map.width; ++x) {
+            const auto i = static_cast<std::size_t>(map.index(x, y));
+            row += map.walk[i] ? (map.sight[i] ? '%' : '.') : (map.sight[i] ? '#' : '~');
+        }
+        rows.push_back(row);
+    }
+    j["rows"] = rows;
+    auto cells = [&](const std::vector<int>& cs) {
+        ordered_json a = ordered_json::array();
+        for (int c : cs) {
+            const Cell p = map.cell(c);
+            a.push_back({p.x, p.y});
+        }
+        return a;
+    };
+    j["points"] = ordered_json::array();
+    for (const Point& p : map.points) j["points"].push_back({{"name", p.name}, {"tags", p.tags}, {"x", p.x}, {"y", p.y}});
+    j["regions"] = ordered_json::array();
+    for (const Region& r : map.regions)
+        j["regions"].push_back({{"name", r.name}, {"tags", r.tags}, {"door", r.door}, {"cells", cells(r.cells)}});
+    j["options"] = ordered_json::array();
+    std::vector<std::string> optional;
+    for (const VariantGroup& g : map.groups) {
+        if (g.optional) optional.push_back(g.name);
+        for (const VariantOption& o : g.options)
+            j["options"].push_back({{"group", g.name},
+                                    {"name", o.name},
+                                    {"tags", o.tags},
+                                    {"block_walk_cells", cells(o.block_walk)},
+                                    {"block_sight_cells", cells(o.block_sight)}});
+    }
+    j["optional_groups"] = optional;
+    return j.dump(1) + "\n";
+}
+
 std::string to_text(const Map& map, const Report& rep) {
     std::ostringstream os;
     os << "adari " << version() << "  map " << map.name << "  (" << map.width << "x" << map.height

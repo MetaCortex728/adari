@@ -52,6 +52,26 @@ TEST_CASE("SARIF report is version 2.1.0 with file regions") {
     CHECK(run.contains("invocations"));  // the not-checked rule is reported
 }
 
+TEST_CASE("Adari JSON round-trips a map and its rule results") {
+    const Map a = load_map(ADARI_SOURCE_DIR "/examples/courtyard/courtyard-broken.txt");
+    const Map b = parse_native(to_native_json(a), "round.json");
+    CHECK(b.walk == a.walk);
+    CHECK(b.sight == a.sight);
+    CHECK(b.points.size() == a.points.size());
+    REQUIRE(b.regions.size() == a.regions.size());
+    for (std::size_t i = 0; i < a.regions.size(); ++i) {
+        CHECK(b.regions[i].cells == a.regions[i].cells);
+        CHECK(b.regions[i].door == a.regions[i].door);
+    }
+    REQUIRE(b.groups.size() == a.groups.size());
+    CHECK(b.groups[0].optional == a.groups[0].optional);
+    const RuleSet rules = load_rules(ADARI_SOURCE_DIR "/examples/courtyard/rules.json");
+    const Report ra = evaluate(a, rules);
+    const Report rb = evaluate(b, rules);
+    REQUIRE(ra.results.size() == rb.results.size());
+    for (std::size_t i = 0; i < ra.results.size(); ++i) CHECK(ra.results[i].status == rb.results[i].status);
+}
+
 TEST_CASE("PNG encoder writes a valid header and the overlay has the map's size") {
     const auto png = encode_png(2, 1, {255, 0, 0, 0, 255, 0});
     REQUIRE(png.size() > 33);

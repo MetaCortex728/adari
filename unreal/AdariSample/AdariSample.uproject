@@ -1,0 +1,20 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "Adari's sample and test host. Builds the plugin from ../Adari and runs its automation tests.",
+	"Modules": [
+		{
+			"Name": "AdariSample",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{ "Name": "Adari", "Enabled": true },
+		{ "Name": "AndroidFileServer", "Enabled": false }
+	],
+	"AdditionalPluginDirectories": [
+		".."
+	]
+}

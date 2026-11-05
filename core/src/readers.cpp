@@ -298,8 +298,6 @@ Map parse_native(const std::string& text, const std::string& file) {
     if (j.contains("cell_size")) ascii += "cell_size " + std::to_string(j["cell_size"].get<double>()) + "\n";
     if (j.contains("legend"))
         for (const auto& [k, v] : j["legend"].items()) ascii += "legend " + k + " " + v.get<std::string>() + "\n";
-    if (j.contains("optional_groups"))
-        for (const auto& g : j["optional_groups"]) ascii += "group " + g.get<std::string>() + " optional\n";
     ascii += "map\n";
     for (const auto& r : j["rows"]) ascii += r.get<std::string>() + "\n";
     Map map = parse_ascii(ascii, file);
@@ -311,6 +309,19 @@ Map parse_native(const std::string& text, const std::string& file) {
         for (const auto& v : o.at("polygon")) p.emplace_back(v.at(0).get<double>(), v.at(1).get<double>());
         return p;
     };
+    // Cells given as [[x, y], ...] lists; out-of-range cells are an error.
+    auto cell_list = [&](const json& list) {
+        std::vector<int> out;
+        for (const auto& v : list) {
+            const int x = v.at(0).get<int>();
+            const int y = v.at(1).get<int>();
+            if (!map.inside(x, y)) fail(file, "cell (" + std::to_string(x) + ", " + std::to_string(y) + ") is outside the map");
+            out.push_back(map.index(x, y));
+        }
+        return out;
+    };
+    // A region or option covers either "cells" or a "polygon".
+    auto area_of = [&](const json& o) { return o.contains("cells") ? cell_list(o["cells"]) : rasterize(map, poly_of(o)); };
     auto tags_of = [](const json& o) {
         std::vector<std::string> t;
         if (o.contains("tags"))
@@ -328,18 +339,27 @@ Map parse_native(const std::string& text, const std::string& file) {
                 reg.name = r.at("name").get<std::string>();
                 reg.tags = tags_of(r);
                 reg.door = r.value("door", false);
-                reg.cells = rasterize(map, poly_of(r));
+                reg.cells = area_of(r);
                 map.regions.push_back(reg);
             }
         if (j.contains("options"))
             for (const auto& o : j["options"]) {
                 VariantOption& opt = option_for(map, o.at("group").get<std::string>() + "." + o.at("name").get<std::string>(), file);
                 for (const auto& t : tags_of(o)) opt.tags.push_back(t);
+                if (o.contains("block_walk_cells") || o.contains("block_sight_cells")) {
+                    const auto bw = cell_list(o.value("block_walk_cells", json::array()));
+                    const auto bs = cell_list(o.value("block_sight_cells", json::array()));
+                    opt.block_walk.insert(opt.block_walk.end(), bw.begin(), bw.end());
+                    opt.block_sight.insert(opt.block_sight.end(), bs.begin(), bs.end());
+                    continue;
+                }
                 const std::string blocks = o.value("blocks", std::string("both"));
-                const auto cells = rasterize(map, poly_of(o));
+                const auto cells = area_of(o);
                 if (blocks != "sight") opt.block_walk.insert(opt.block_walk.end(), cells.begin(), cells.end());
                 if (blocks != "walk") opt.block_sight.insert(opt.block_sight.end(), cells.begin(), cells.end());
             }
+        if (j.contains("optional_groups"))
+            for (const auto& g : j["optional_groups"]) set_optional(map, g.get<std::string>(), file);
     } catch (const json::exception& e) {
         fail(file, std::string("bad points, regions or options: ") + e.what());
     }

@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Adari",
+	"Description": "Checks that a level does what its designer intended: reachability for an agent's size, hidden rooms, cover near spawns, path lengths, no softlocks, for every variant.",
+	"Category": "Level Design",
+	"CreatedBy": "Adari authors",
+	"DocsURL": "https://github.com/MetaCortex728/adari",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Modules": [
+		{
+			"Name": "Adari",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}

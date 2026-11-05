@@ -19,6 +19,11 @@ const char* version();
 // variant groups. Useful as a first run on an unfamiliar map.
 std::string summarize(const Map& map);
 
+// Writes a map as Adari JSON (rows plus explicit cell lists), so a map
+// sampled inside an engine can be checked again by the command-line tool.
+// Edge blocks (one-way cells) are not representable and are dropped.
+std::string to_native_json(const Map& map);
+
 std::string to_text(const Map& map, const Report& report);
 std::string to_json(const Map& map, const Report& report);
 std::string to_sarif(const Map& map, const Report& report);
