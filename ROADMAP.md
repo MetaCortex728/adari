@@ -37,16 +37,21 @@ It sits between tools rather than replacing them. Editing stays in Tiled, LDtk, 
 
 Acceptance for stage 1: every template has a failing fixture that it catches and a passing one it accepts; Tiled and LDtk fixtures load to the same model as an equivalent ASCII map; the CLI returns a non-zero exit code and a SARIF file on failure; CI is green on all four presets.
 
-## Stage 2: engines and movement
+## Stage 2: Unreal, real maps and movement
 
-- Unreal 5.8 plugin: editor exporter to Adari JSON, overlay in the level viewport, Data Validation hook, local test script (as in Hanji).
-- Godot 4 GDExtension: reads `.tscn` TileMapLayer and collision, markers in the editor; Godot runs headless on GitHub runners, so this front end can be tested in CI.
-- Unity: editor exporter (C#) to Adari JSON, results window. Needs a Unity install for local testing.
+Unreal is the only engine front end for now (decided 2026-11-05); Godot and Unity wait until it is solid.
+
+- Done: Unreal 5.8 plugin with a sampling volume, markers (tags, doors, variant props), collision or navmesh sampling with step height and sight, `Adari.Check`, debug drawing, reports and Adari JSON export, headless automation tests.
+- Done: TMX and compressed tile data, LDtk fixes found on the official samples, `adari inspect`, `--all-levels`, reader meanings, painted-map spatial JSON.
+- Unreal next: a persistent editor-mode overlay, a Data Validation hook on save, rotated volumes and several floors.
+- Links between distant cells: teleporters, ladders, level transitions (the LDtk Entities sample's exit room is reachable only by teleporter).
+- Boundary tests from painted-map files (start, direction, expected stop box).
+- Rule scopes: limit a rule to a region, so decorative floor outside the play space is not reported.
 - Isometric and staggered Tiled maps; Tiled flip bits applied to per-tile collision.
 - Directed edges and one-way moves (RPG Maker passability, ledges, drops); softlock detection using forward, backward and sink labels.
 - Platformer movement as templates compiled from physics constants; ability-gated reachability by sphere search.
 - Sampled seeds: a generator hook that emits maps, checked headless with failing seeds kept as fixtures.
-- Han's painted-map `spatial.json` reader (normalized polygons, footprints, cover, sight blockers).
+- Later: Godot 4 GDExtension (headless Godot can run in GitHub CI) and a Unity editor exporter.
 
 ## Stage 3: art against data, and more formats
 
