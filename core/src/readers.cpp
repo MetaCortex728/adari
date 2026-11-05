@@ -12,6 +12,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "decode.hpp"
+
 namespace adari {
 
 using nlohmann::json;
@@ -351,15 +353,53 @@ namespace {
 
 constexpr std::uint32_t kGidMask = 0x0FFFFFFFu;  // clears the four flip/rotation flags
 
+enum class Meaning { kFloor, kWall, kLow, kSight, kUnknown };
+
+Meaning parse_meaning(const std::string& s, const std::string& file) {
+    const std::string m = lower(s);
+    if (m == "wall" || m == "solid") return Meaning::kWall;
+    if (m == "low" || m == "walk") return Meaning::kLow;
+    if (m == "sight") return Meaning::kSight;
+    if (m == "floor" || m == "none") return Meaning::kFloor;
+    fail(file, "meaning must be wall, low, sight or floor, not '" + s + "'");
+}
+
+// User overrides first, then nothing (the caller guesses).
+Meaning override_for(const ReaderOptions& opt, const std::string& name, const std::string& file) {
+    const std::string key = lower(name);
+    for (const auto& [k, v] : opt.meanings)
+        if (lower(k) == key) return parse_meaning(v, file);
+    return Meaning::kUnknown;
+}
+
+// Safe string read: missing or null values give the fallback.
+std::string s(const json& j, const char* key, const std::string& fallback = {}) {
+    if (!j.is_object()) return fallback;
+    const auto it = j.find(key);
+    return it != j.end() && it->is_string() ? it->get<std::string>() : fallback;
+}
+
+double d(const json& j, const char* key, double fallback = 0.0) {
+    if (!j.is_object()) return fallback;
+    const auto it = j.find(key);
+    return it != j.end() && it->is_number() ? it->get<double>() : fallback;
+}
+
+bool b(const json& j, const char* key, bool fallback = false) {
+    if (!j.is_object()) return fallback;
+    const auto it = j.find(key);
+    return it != j.end() && it->is_boolean() ? it->get<bool>() : fallback;
+}
+
 struct TileInfo {
     bool solid = false;
     bool blocks_sight = false;
 };
 
 json prop(const json& owner, const std::string& name) {
-    if (!owner.contains("properties")) return nullptr;
+    if (!owner.is_object() || !owner.contains("properties") || !owner["properties"].is_array()) return nullptr;
     for (const auto& p : owner["properties"])
-        if (p.value("name", "") == name) return p.value("value", json());
+        if (s(p, "name") == name) return p.value("value", json());
     return nullptr;
 }
 
@@ -374,16 +414,14 @@ std::string prop_str(const json& owner, const std::string& name) {
 }
 
 std::string type_of(const json& o) {
-    if (o.contains("class") && o["class"].is_string() && !o["class"].get<std::string>().empty())
-        return o["class"].get<std::string>();
-    if (o.contains("type") && o["type"].is_string()) return o["type"].get<std::string>();
-    return {};
+    const std::string cls = s(o, "class");
+    return cls.empty() ? s(o, "type") : cls;
 }
 
-std::vector<std::string> csv(const std::string& s) {
+std::vector<std::string> csv(const std::string& text) {
     std::vector<std::string> out;
     std::string cur;
-    for (char c : s) {
+    for (char c : text) {
         if (c == ',') {
             if (!cur.empty()) out.push_back(cur);
             cur.clear();
@@ -395,36 +433,206 @@ std::vector<std::string> csv(const std::string& s) {
     return out;
 }
 
-TileInfo tile_info(const json& tile) {
+TileInfo tile_info(const json& tile, const ReaderOptions& opt, const std::string& file) {
     TileInfo t;
-    const std::string cls = lower(type_of(tile));
-    const bool has_shapes = tile.contains("objectgroup") && tile["objectgroup"].contains("objects") &&
-                            !tile["objectgroup"]["objects"].empty();
-    t.solid = prop_bool(tile, "solid", prop_bool(tile, "collision", has_shapes || cls == "wall" || cls == "solid"));
+    const std::string cls = type_of(tile);
+    const Meaning m = override_for(opt, cls, file);
+    if (m != Meaning::kUnknown) {
+        t.solid = m == Meaning::kWall || m == Meaning::kLow;
+        t.blocks_sight = m == Meaning::kWall || m == Meaning::kSight;
+        return t;
+    }
+    const bool has_shapes = tile.contains("objectgroup") && tile["objectgroup"].is_object() &&
+                            tile["objectgroup"].contains("objects") && !tile["objectgroup"]["objects"].empty();
+    const std::string lc = lower(cls);
+    t.solid = prop_bool(tile, "solid", prop_bool(tile, "collision", has_shapes || lc == "wall" || lc == "solid"));
     t.blocks_sight = prop_bool(tile, "blocks_sight", t.solid);
     return t;
 }
 
-}  // namespace
-
-Map parse_tiled(const std::string& text, const std::string& file, const std::string& base_dir) {
-    json j;
-    try {
-        j = json::parse(text);
-    } catch (const json::parse_error& e) {
-        fail(file, std::string("not valid JSON: ") + e.what());
+// Tile layer data as global ids, whatever the encoding.
+std::vector<std::uint32_t> layer_gids(const json& layer, const std::string& file) {
+    std::vector<std::uint32_t> out;
+    const json& data = layer.at("data");
+    if (data.is_array()) {
+        for (const auto& v : data) out.push_back(v.get<std::uint32_t>());
+        return out;
     }
-    const std::string orient = j.value("orientation", "orthogonal");
+    if (!data.is_string()) fail(file, "tile layer '" + s(layer, "name") + "' has no data");
+    const std::string enc = s(layer, "encoding", "csv");
+    if (enc == "csv") {
+        for (const auto& t : csv(data.get<std::string>())) out.push_back(static_cast<std::uint32_t>(std::stoul(t)));
+        return out;
+    }
+    if (enc != "base64") fail(file, "unknown tile layer encoding '" + enc + "'");
+    std::vector<std::uint8_t> bytes = detail::base64_decode(data.get<std::string>());
+    const std::string comp = s(layer, "compression");
+    if (comp == "zlib" || comp == "gzip") bytes = detail::inflate(bytes, comp == "gzip");
+    else if (!comp.empty()) fail(file, "tile layer compression '" + comp + "' is not supported (use zlib, gzip or none)");
+    if (bytes.size() % 4 != 0) fail(file, "tile layer data is not a whole number of tiles");
+    for (std::size_t k = 0; k + 3 < bytes.size(); k += 4)
+        out.push_back(static_cast<std::uint32_t>(bytes[k]) | (static_cast<std::uint32_t>(bytes[k + 1]) << 8) |
+                      (static_cast<std::uint32_t>(bytes[k + 2]) << 16) | (static_cast<std::uint32_t>(bytes[k + 3]) << 24));
+    return out;
+}
+
+// ---- TMX / TSX to the JSON layout Tiled itself writes
+
+json xml_properties(const detail::XmlNode& owner) {
+    json props = json::array();
+    const detail::XmlNode* p = owner.child("properties");
+    if (!p) return props;
+    for (const detail::XmlNode& prop_node : p->children) {
+        if (prop_node.name != "property") continue;
+        const std::string type = prop_node.attr_or("type", "string");
+        const std::string raw = prop_node.attr("value") ? *prop_node.attr("value") : prop_node.text;
+        json v = raw;
+        try {
+            if (type == "bool") v = raw == "true";
+            else if (type == "int") v = std::stoll(raw);
+            else if (type == "float") v = std::stod(raw);
+        } catch (...) {
+            v = raw;
+        }
+        props.push_back({{"name", prop_node.attr_or("name")}, {"type", type}, {"value", v}});
+    }
+    return props;
+}
+
+double num_attr(const detail::XmlNode& n, const char* key, double fallback = 0.0) {
+    const std::string* v = n.attr(key);
+    if (!v) return fallback;
+    try {
+        return std::stod(*v);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+json xml_object(const detail::XmlNode& o) {
+    json j;
+    j["id"] = static_cast<int>(num_attr(o, "id"));
+    j["name"] = o.attr_or("name");
+    j["type"] = o.attr_or("type");
+    j["class"] = o.attr_or("class");
+    j["x"] = num_attr(o, "x");
+    j["y"] = num_attr(o, "y");
+    j["width"] = num_attr(o, "width");
+    j["height"] = num_attr(o, "height");
+    j["rotation"] = num_attr(o, "rotation");
+    if (o.attr("gid")) j["gid"] = static_cast<std::uint32_t>(std::stoul(*o.attr("gid")));
+    if (o.child("point")) j["point"] = true;
+    if (o.child("ellipse")) j["ellipse"] = true;
+    if (const detail::XmlNode* poly = o.child("polygon")) {
+        json pts = json::array();
+        std::istringstream is(poly->attr_or("points"));
+        for (std::string pair; is >> pair;) {
+            const auto comma = pair.find(',');
+            if (comma == std::string::npos) continue;
+            pts.push_back({{"x", std::stod(pair.substr(0, comma))}, {"y", std::stod(pair.substr(comma + 1))}});
+        }
+        j["polygon"] = pts;
+    }
+    if (o.child("polyline")) j["polyline"] = true;
+    j["properties"] = xml_properties(o);
+    return j;
+}
+
+json xml_tileset(const detail::XmlNode& ts) {
+    json j;
+    j["name"] = ts.attr_or("name");
+    j["tiles"] = json::array();
+    for (const detail::XmlNode& t : ts.children) {
+        if (t.name != "tile") continue;
+        json tile;
+        tile["id"] = static_cast<int>(num_attr(t, "id"));
+        tile["type"] = t.attr_or("type");
+        tile["class"] = t.attr_or("class");
+        tile["properties"] = xml_properties(t);
+        if (const detail::XmlNode* og = t.child("objectgroup")) {
+            json objs = json::array();
+            for (const detail::XmlNode& o : og->children)
+                if (o.name == "object") objs.push_back(xml_object(o));
+            tile["objectgroup"] = {{"objects", objs}};
+        }
+        j["tiles"].push_back(tile);
+    }
+    return j;
+}
+
+json xml_layers(const detail::XmlNode& parent, const std::string& file) {
+    json layers = json::array();
+    for (const detail::XmlNode& n : parent.children) {
+        json l;
+        l["name"] = n.attr_or("name");
+        l["properties"] = xml_properties(n);
+        if (n.name == "layer") {
+            l["type"] = "tilelayer";
+            l["width"] = static_cast<int>(num_attr(n, "width"));
+            l["height"] = static_cast<int>(num_attr(n, "height"));
+            const detail::XmlNode* data = n.child("data");
+            if (!data) fail(file, "layer '" + n.attr_or("name") + "' has no data");
+            if (data->child("chunk")) fail(file, "infinite Tiled maps are not supported in this version");
+            const std::string enc = data->attr_or("encoding");
+            if (enc.empty()) {
+                json gids = json::array();
+                for (const detail::XmlNode& t : data->children)
+                    if (t.name == "tile") gids.push_back(static_cast<std::uint32_t>(std::stoul(t.attr_or("gid", "0"))));
+                l["data"] = gids;
+            } else {
+                l["encoding"] = enc;
+                if (data->attr("compression")) l["compression"] = *data->attr("compression");
+                l["data"] = data->text;
+            }
+        } else if (n.name == "objectgroup") {
+            l["type"] = "objectgroup";
+            l["objects"] = json::array();
+            for (const detail::XmlNode& o : n.children)
+                if (o.name == "object") l["objects"].push_back(xml_object(o));
+        } else if (n.name == "group") {
+            l["type"] = "group";
+            l["layers"] = xml_layers(n, file);
+        } else {
+            continue;  // image layers and other elements carry no collision
+        }
+        layers.push_back(l);
+    }
+    return layers;
+}
+
+json tmx_to_json(const detail::XmlNode& map, const std::string& file) {
+    if (map.name != "map") fail(file, "not a Tiled map (root element is <" + map.name + ">)");
+    json j;
+    j["orientation"] = map.attr_or("orientation", "orthogonal");
+    j["infinite"] = map.attr_or("infinite", "0") == "1";
+    j["width"] = static_cast<int>(num_attr(map, "width"));
+    j["height"] = static_cast<int>(num_attr(map, "height"));
+    j["tilewidth"] = static_cast<int>(num_attr(map, "tilewidth"));
+    j["tileheight"] = static_cast<int>(num_attr(map, "tileheight"));
+    j["properties"] = xml_properties(map);
+    j["tilesets"] = json::array();
+    for (const detail::XmlNode& ts : map.children) {
+        if (ts.name != "tileset") continue;
+        json t = ts.attr("source") ? json{{"source", *ts.attr("source")}} : xml_tileset(ts);
+        t["firstgid"] = static_cast<std::uint32_t>(num_attr(ts, "firstgid", 1));
+        j["tilesets"].push_back(t);
+    }
+    j["layers"] = xml_layers(map, file);
+    return j;
+}
+
+Map tiled_from_json(const json& j, const std::string& file, const std::string& base_dir, const ReaderOptions& opt) {
+    const std::string orient = s(j, "orientation", "orthogonal");
     if (orient != "orthogonal") fail(file, "only orthogonal Tiled maps are supported in this version (got '" + orient + "')");
-    if (j.value("infinite", false)) fail(file, "infinite Tiled maps are not supported in this version");
-    const int tw = j.value("tilewidth", 0);
-    const int th = j.value("tileheight", 0);
+    if (b(j, "infinite")) fail(file, "infinite Tiled maps are not supported in this version");
+    const double tw = d(j, "tilewidth");
+    const double th = d(j, "tileheight");
     if (tw <= 0 || th <= 0) fail(file, "missing tilewidth or tileheight");
 
     Map map;
     map.name = file;
     map.source_file = file;
-    map.resize(j.value("width", 0), j.value("height", 0));
+    map.resize(static_cast<int>(d(j, "width")), static_cast<int>(d(j, "height")));
     if (map.width <= 0 || map.height <= 0) fail(file, "missing width or height");
     {
         const json cs = prop(j, "adari_cell_size");
@@ -433,56 +641,59 @@ Map parse_tiled(const std::string& text, const std::string& file, const std::str
     std::fill(map.walk.begin(), map.walk.end(), 0);  // walkable only where a tile exists
     std::vector<std::uint8_t> any_tile(map.size(), 0);
     std::vector<std::uint8_t> solid(map.size(), 0);
+    bool any_tile_layers = false;
+    bool any_tile_objects = false;
 
     // Tile properties by global id.
     std::map<std::uint32_t, TileInfo> info;
     for (const auto& ts_ref : j.value("tilesets", json::array())) {
         json ts = ts_ref;
-        const auto first = ts_ref.value("firstgid", 1u);
-        if (ts_ref.contains("source")) {
-            const std::string src = ts_ref["source"].get<std::string>();
-            if (lower(src).size() >= 4 && lower(src).substr(src.size() - 4) == ".tsx")
-                fail(file, "external tileset '" + src + "' is XML (.tsx); save it as JSON (.tsj)");
+        const auto first = static_cast<std::uint32_t>(d(ts_ref, "firstgid", 1));
+        const std::string src = s(ts_ref, "source");
+        if (!src.empty()) {
             try {
-                ts = json::parse(read_file(join_path(base_dir, src)));
+                const std::string text = read_file(join_path(base_dir, src));
+                const std::string ext = lower(src.substr(src.find_last_of('.') == std::string::npos ? src.size() : src.find_last_of('.')));
+                ts = ext == ".tsx" ? xml_tileset(detail::parse_xml(text)) : json::parse(text);
             } catch (const std::exception& e) {
                 fail(file, "cannot read tileset '" + src + "': " + e.what());
             }
         }
         for (const auto& tile : ts.value("tiles", json::array()))
-            info[first + tile.value("id", 0u)] = tile_info(tile);
+            info[first + static_cast<std::uint32_t>(d(tile, "id"))] = tile_info(tile, opt, file);
     }
 
     const std::vector<std::string> optional = csv(prop_str(j, "adari_optional_groups"));
 
-    std::function<void(const json&)> walk_layers;
     auto handle_object = [&](const json& o) {
-        const double ox = o.value("x", 0.0) / tw;
-        const double oy = o.value("y", 0.0) / th;
-        const std::string name = o.value("name", std::string());
+        if (b(o, "polyline")) return;  // open lines enclose no area
+        const double ox = d(o, "x") / tw;
+        const double oy = d(o, "y") / th;
+        const std::string name = s(o, "name");
         std::vector<std::string> tags;
         const std::string cls = type_of(o);
         if (!cls.empty()) tags.push_back(cls);
         for (const auto& t : csv(prop_str(o, "adari_tags"))) tags.push_back(t);
-        const std::string label = name.empty() ? (cls.empty() ? "object " + std::to_string(o.value("id", 0)) : cls) : name;
+        const std::string label = name.empty() ? (cls.empty() ? "object " + std::to_string(static_cast<int>(d(o, "id"))) : cls) : name;
 
-        if (o.value("point", false)) {
+        if (b(o, "point")) {
             map.points.push_back(Point{label, tags, ox, oy});
             return;
         }
         // Outline in cell units, rotated clockwise around (x, y) as Tiled does.
         std::vector<std::pair<double, double>> local;
-        const double w = o.value("width", 0.0) / tw;
-        const double h = o.value("height", 0.0) / th;
-        if (o.contains("polygon")) {
-            for (const auto& p : o["polygon"]) local.emplace_back(p.value("x", 0.0) / tw, p.value("y", 0.0) / th);
-        } else if (o.value("ellipse", false)) {
+        const double w = d(o, "width") / tw;
+        const double h = d(o, "height") / th;
+        if (o.contains("polygon") && o["polygon"].is_array()) {
+            for (const auto& p : o["polygon"]) local.emplace_back(d(p, "x") / tw, d(p, "y") / th);
+        } else if (b(o, "ellipse")) {
             for (int k = 0; k < 24; ++k) {
                 const double a = 2.0 * 3.14159265358979323846 * k / 24.0;
                 local.emplace_back(w / 2 + w / 2 * std::cos(a), h / 2 + h / 2 * std::sin(a));
             }
         } else if (o.contains("gid")) {  // tile objects anchor at the bottom-left
             local = {{0, -h}, {w, -h}, {w, 0}, {0, 0}};
+            any_tile_objects = true;
         } else {
             if (w <= 0 || h <= 0) {  // zero-size rectangle: treat as a point
                 map.points.push_back(Point{label, tags, ox, oy});
@@ -490,29 +701,40 @@ Map parse_tiled(const std::string& text, const std::string& file, const std::str
             }
             local = {{0, 0}, {w, 0}, {w, h}, {0, h}};
         }
-        const double rot = o.value("rotation", 0.0) * 3.14159265358979323846 / 180.0;
+        const double rot = d(o, "rotation") * 3.14159265358979323846 / 180.0;
         std::vector<std::pair<double, double>> poly;
         for (const auto& [lx, ly] : local)
             poly.emplace_back(ox + lx * std::cos(rot) - ly * std::sin(rot), oy + lx * std::sin(rot) + ly * std::cos(rot));
         const std::vector<int> cells = rasterize(map, poly);
 
         const std::string variant = prop_str(o, "variant");
-        const bool is_solid = prop_bool(o, "solid", false);
-        const bool sight = prop_bool(o, "blocks_sight", is_solid || !variant.empty());
+        // A tile object is solid when its tile is (for example a crate tile
+        // with a collision shape), unless the object says otherwise.
+        bool tile_solid = false, tile_sight = false;
+        if (o.contains("gid")) {
+            const auto it = info.find(static_cast<std::uint32_t>(d(o, "gid")) & kGidMask);
+            if (it != info.end()) {
+                tile_solid = it->second.solid;
+                tile_sight = it->second.blocks_sight;
+            }
+        }
+        const bool is_solid = prop_bool(o, "solid", tile_solid);
+        const bool sight = prop_bool(o, "blocks_sight", is_solid || tile_sight || !variant.empty());
         if (!variant.empty()) {
-            VariantOption& opt = option_for(map, variant, file);
-            for (const auto& t : tags) opt.tags.push_back(t);
-            if (prop_bool(o, "blocks_walk", true)) opt.block_walk.insert(opt.block_walk.end(), cells.begin(), cells.end());
-            if (sight) opt.block_sight.insert(opt.block_sight.end(), cells.begin(), cells.end());
+            VariantOption& vo = option_for(map, variant, file);
+            for (const auto& t : tags) vo.tags.push_back(t);
+            if (prop_bool(o, "blocks_walk", true)) vo.block_walk.insert(vo.block_walk.end(), cells.begin(), cells.end());
+            if (sight) vo.block_sight.insert(vo.block_sight.end(), cells.begin(), cells.end());
             return;
         }
-        if (is_solid || prop_bool(o, "blocks_sight", false)) {
+        if (is_solid || sight) {
             for (int c : cells) {
                 if (is_solid) solid[static_cast<std::size_t>(c)] = 1;
                 if (sight) map.sight[static_cast<std::size_t>(c)] = 1;
             }
             if (tags.empty()) return;
         }
+        if (tags.empty()) return;  // untagged shapes carry no meaning for rules
         Region r;
         r.name = label;
         r.tags = tags;
@@ -520,34 +742,24 @@ Map parse_tiled(const std::string& text, const std::string& file, const std::str
         if (r.door && std::find(r.tags.begin(), r.tags.end(), "door") == r.tags.end()) r.tags.push_back("door");
         r.cells = cells;
         map.regions.push_back(r);
-        // A tagged object with a centre also counts as a point, so selectors
-        // like "spawn" work for rectangles too.
-        if (!poly.empty() && !r.door) {
-            double cx = 0, cy = 0;
-            for (const auto& [x, y] : poly) {
-                cx += x;
-                cy += y;
-            }
-            map.points.push_back(Point{label, tags, cx / static_cast<double>(poly.size()), cy / static_cast<double>(poly.size())});
-        }
     };
-    walk_layers = [&](const json& layers) {
+    std::function<void(const json&)> walk_layers = [&](const json& layers) {
         for (const auto& layer : layers) {
             if (prop_str(layer, "adari") == "ignore") continue;
-            const std::string type = layer.value("type", "");
+            const std::string type = s(layer, "type");
             if (type == "group") {
                 walk_layers(layer.value("layers", json::array()));
             } else if (type == "tilelayer") {
-                if (layer.value("encoding", "csv") != "csv" || layer.contains("compression") ||
-                    !layer.contains("data") || !layer["data"].is_array())
-                    fail(file, "tile layer '" + layer.value("name", "") +
-                                   "' must use CSV encoding (Map Properties > Tile Layer Format)");
-                const auto& data = layer["data"];
-                const int lw = layer.value("width", map.width);
-                const int lx = layer.value("x", 0);
-                const int ly = layer.value("y", 0);
-                for (std::size_t k = 0; k < data.size(); ++k) {
-                    const auto gid = data[k].get<std::uint32_t>() & kGidMask;
+                if (layer.contains("chunks")) fail(file, "infinite Tiled maps are not supported in this version");
+                const std::vector<std::uint32_t> gids = layer_gids(layer, file);
+                any_tile_layers = any_tile_layers || std::any_of(gids.begin(), gids.end(), [](std::uint32_t g) {
+                                      return (g & kGidMask) != 0;
+                                  });
+                const int lw = static_cast<int>(d(layer, "width", map.width));
+                const int lx = static_cast<int>(d(layer, "x"));
+                const int ly = static_cast<int>(d(layer, "y"));
+                for (std::size_t k = 0; k < gids.size(); ++k) {
+                    const auto gid = gids[k] & kGidMask;
                     if (gid == 0) continue;
                     const int x = lx + static_cast<int>(k) % lw;
                     const int y = ly + static_cast<int>(k) / lw;
@@ -569,63 +781,120 @@ Map parse_tiled(const std::string& text, const std::string& file, const std::str
     } catch (const json::exception& e) {
         fail(file, std::string("unexpected Tiled data: ") + e.what());
     }
+    // Maps built only from objects have no tile layers; there, empty cells are
+    // open space rather than void.
+    const bool void_is_open = !any_tile_layers;
     for (std::size_t c = 0; c < map.size(); ++c) {
-        map.walk[c] = any_tile[c] && !solid[c];
-        if (!any_tile[c]) map.sight[c] = 1;  // void blocks sight too
+        const bool present = any_tile[c] || void_is_open;
+        map.walk[c] = present && !solid[c];
+        if (!present) map.sight[c] = 1;  // void blocks sight too
     }
+    if (void_is_open)
+        map.notes.push_back("no tile layers: empty cells are open space and only solid objects block");
+    const bool any_collision_data = std::any_of(info.begin(), info.end(), [](const auto& kv) {
+        return kv.second.solid || kv.second.blocks_sight;
+    });
+    if (!any_collision_data && !any_tile_objects)
+        map.notes.push_back(
+            "no tile carries collision data (a 'solid' property, a wall class or collision shapes), so every "
+            "tiled cell is floor; mark wall tiles in the tileset or pass --meaning CLASS=wall");
     for (const auto& g : optional) set_optional(map, g, file);
     finish(map, file);
     return map;
 }
 
-// ------------------------------------------------------------------- LDtk
-
-namespace {
-
-enum class IntMeaning { kFloor, kWall, kLowBlock, kSightOnly };
-
-IntMeaning meaning_of(const std::string& identifier) {
-    const std::string id = lower(identifier);
-    auto has = [&](const char* w) { return id.find(w) != std::string::npos; };
-    if (has("wall") || has("solid") || has("collision") || has("block") || has("rock")) return IntMeaning::kWall;
-    if (has("water") || has("pit") || has("hole") || has("void") || has("chasm") || has("lava") ||
-        has("fence") || has("glass") || has("window"))
-        return IntMeaning::kLowBlock;
-    if (has("foliage") || has("bush") || has("smoke") || has("curtain")) return IntMeaning::kSightOnly;
-    return IntMeaning::kFloor;
-}
-
-json field(const json& entity, const std::string& name) {
-    for (const auto& f : entity.value("fieldInstances", json::array()))
-        if (f.value("__identifier", "") == name) return f.value("__value", json());
-    return nullptr;
-}
-
 }  // namespace
 
-Map parse_ldtk(const std::string& text, const std::string& file, const std::string& base_dir,
-               const std::string& level_name) {
+Map parse_tiled(const std::string& text, const std::string& file, const std::string& base_dir,
+                const ReaderOptions& opt) {
     json j;
     try {
         j = json::parse(text);
     } catch (const json::parse_error& e) {
         fail(file, std::string("not valid JSON: ") + e.what());
     }
+    return tiled_from_json(j, file, base_dir, opt);
+}
+
+Map parse_tmx(const std::string& text, const std::string& file, const std::string& base_dir,
+              const ReaderOptions& opt) {
+    json j;
+    try {
+        j = tmx_to_json(detail::parse_xml(text), file);
+    } catch (const std::runtime_error& e) {
+        const std::string what = e.what();
+        if (what.rfind(file, 0) == 0) throw;
+        fail(file, what);
+    }
+    return tiled_from_json(j, file, base_dir, opt);
+}
+
+// ------------------------------------------------------------------- LDtk
+
+namespace {
+
+Meaning guess_meaning(const std::string& identifier, bool collision_layer) {
+    const std::string id = lower(identifier);
+    auto has = [&](const char* w) { return id.find(w) != std::string::npos; };
+    if (has("floor") || has("ground") || has("grass") || has("path") || has("road") || has("ladder") ||
+        has("bridge") || has("stair"))
+        return Meaning::kFloor;
+    if (has("wall") || has("solid") || has("collision") || has("block") || has("rock")) return Meaning::kWall;
+    if (has("water") || has("pit") || has("hole") || has("void") || has("chasm") || has("lava") ||
+        has("fence") || has("glass") || has("window") || has("spike"))
+        return Meaning::kLow;
+    if (has("foliage") || has("bush") || has("smoke") || has("curtain")) return Meaning::kSight;
+    // In a layer named for collision, an unnamed or unknown value is solid.
+    return collision_layer ? Meaning::kWall : Meaning::kFloor;
+}
+
+bool collision_layer_name(const std::string& identifier) {
+    const std::string id = lower(identifier);
+    return id.find("collision") != std::string::npos || id.find("wall") != std::string::npos ||
+           id.find("solid") != std::string::npos;
+}
+
+json field(const json& entity, const std::string& name) {
+    for (const auto& f : entity.value("fieldInstances", json::array()))
+        if (s(f, "__identifier") == name) return f.value("__value", json());
+    return nullptr;
+}
+
+std::vector<json> all_levels(const json& j) {
     std::vector<json> levels;
     for (const auto& l : j.value("levels", json::array())) levels.push_back(l);
     for (const auto& w : j.value("worlds", json::array()))
         for (const auto& l : w.value("levels", json::array())) levels.push_back(l);
+    return levels;
+}
+
+}  // namespace
+
+std::vector<std::string> ldtk_levels(const std::string& text) {
+    std::vector<std::string> out;
+    for (const json& l : all_levels(json::parse(text))) out.push_back(s(l, "identifier"));
+    return out;
+}
+
+Map parse_ldtk(const std::string& text, const std::string& file, const std::string& base_dir,
+               const ReaderOptions& opt) {
+    json j;
+    try {
+        j = json::parse(text);
+    } catch (const json::parse_error& e) {
+        fail(file, std::string("not valid JSON: ") + e.what());
+    }
+    const std::vector<json> levels = all_levels(j);
     if (levels.empty()) fail(file, "the project has no levels");
     json level;
     for (const auto& l : levels)
-        if (level_name.empty() || l.value("identifier", "") == level_name) {
+        if (opt.level.empty() || s(l, "identifier") == opt.level) {
             level = l;
             break;
         }
-    if (level.is_null()) fail(file, "no level named '" + level_name + "'");
-    if (level.contains("externalRelPath") && level["externalRelPath"].is_string() &&
-        (!level.contains("layerInstances") || level["layerInstances"].is_null())) {
-        const std::string rel = level["externalRelPath"].get<std::string>();
+    if (level.is_null()) fail(file, "no level named '" + opt.level + "'");
+    if (!s(level, "externalRelPath").empty() && (!level.contains("layerInstances") || level["layerInstances"].is_null())) {
+        const std::string rel = s(level, "externalRelPath");
         try {
             level = json::parse(read_file(join_path(base_dir, rel)));
         } catch (const std::exception& e) {
@@ -633,107 +902,194 @@ Map parse_ldtk(const std::string& text, const std::string& file, const std::stri
         }
     }
 
-    // IntGrid value meanings from the layer definitions.
-    std::map<int, std::map<int, IntMeaning>> meanings;  // layerDefUid -> value -> meaning
-    for (const auto& ld : j["defs"].value("layers", json::array()))
-        for (const auto& v : ld.value("intGridValues", json::array()))
-            meanings[ld.value("uid", 0)][v.value("value", 0)] = meaning_of(v.value("identifier", ""));
-
-    Map map;
-    map.source_file = file;
-    map.name = level.value("identifier", file);
-    const json layers = level.value("layerInstances", json::array());
-    int grid = 0;
-    for (const auto& li : layers) {
-        if (li.value("__type", "") != "IntGrid") continue;
-        const int cw = li.value("__cWid", 0);
-        const int ch = li.value("__cHei", 0);
-        const int gs = li.value("__gridSize", 0);
-        if (grid == 0) {
-            grid = gs;
-            map.resize(cw, ch);
-        } else if (gs != grid || cw != map.width || ch != map.height) {
-            fail(file, "IntGrid layers with different grid sizes are not supported in this version");
-        }
-        const auto& m = meanings[li.value("layerDefUid", 0)];
-        const auto& csv_values = li.value("intGridCsv", json::array());
-        for (std::size_t k = 0; k < csv_values.size() && k < map.size(); ++k) {
-            const int v = csv_values[k].get<int>();
-            if (v == 0) continue;
-            const auto it = m.find(v);
-            const IntMeaning mean = it == m.end() ? IntMeaning::kFloor : it->second;
-            if (mean == IntMeaning::kWall || mean == IntMeaning::kLowBlock) map.walk[k] = 0;
-            if (mean == IntMeaning::kWall || mean == IntMeaning::kSightOnly) map.sight[k] = 1;
-        }
-    }
-    if (grid == 0) fail(file, "level '" + map.name + "' has no IntGrid layer to read walls from");
-
-    for (const auto& li : layers) {
-        if (li.value("__type", "") != "Entities") continue;
-        const double offx = li.value("__pxTotalOffsetX", 0.0);
-        const double offy = li.value("__pxTotalOffsetY", 0.0);
-        for (const auto& e : li.value("entityInstances", json::array())) {
-            const std::string id = e.value("__identifier", "");
-            std::vector<std::string> tags = {id};
-            if (lower(id) != id) tags.push_back(lower(id));
-            for (const auto& t : e.value("__tags", json::array())) tags.push_back(t.get<std::string>());
-            const json px = e.value("px", json::array({0, 0}));
-            const double pivx = e.value("__pivot", json::array({0.5, 0.5})).at(0).get<double>();
-            const double pivy = e.value("__pivot", json::array({0.5, 0.5})).at(1).get<double>();
-            const double w = e.value("width", grid);
-            const double h = e.value("height", grid);
-            // Top-left of the entity box in pixels, then in cells.
-            const double left = (px.at(0).get<double>() + offx - pivx * w) / grid;
-            const double top = (px.at(1).get<double>() + offy - pivy * h) / grid;
-            const double cw = w / grid;
-            const double chh = h / grid;
-            const json name_field = field(e, "name");
-            const std::string name = name_field.is_string() ? name_field.get<std::string>() : id;
-            const json variant = field(e, "variant");
-            const std::vector<std::pair<double, double>> poly = {
-                {left, top}, {left + cw, top}, {left + cw, top + chh}, {left, top + chh}};
-            if (variant.is_string() && !variant.get<std::string>().empty()) {
-                VariantOption& opt = option_for(map, variant.get<std::string>(), file);
-                for (const auto& t : tags) opt.tags.push_back(t);
-                const auto cells = rasterize(map, poly);
-                const json bs = field(e, "blocks_sight");
-                opt.block_walk.insert(opt.block_walk.end(), cells.begin(), cells.end());
-                if (!bs.is_boolean() || bs.get<bool>()) opt.block_sight.insert(opt.block_sight.end(), cells.begin(), cells.end());
-                continue;
-            }
-            map.points.push_back(Point{name, tags, left + cw / 2, top + chh / 2});
-            const json door = field(e, "door");
-            const bool is_door = (door.is_boolean() && door.get<bool>()) || lower(id) == "door";
-            if (is_door || cw > 1.0 || chh > 1.0) {
-                Region r;
-                r.name = name;
-                r.tags = tags;
-                r.door = is_door;
-                if (is_door && std::find(r.tags.begin(), r.tags.end(), "door") == r.tags.end()) r.tags.push_back("door");
-                r.cells = rasterize(map, poly);
-                map.regions.push_back(r);
+    try {
+        // IntGrid value meanings from the layer definitions.
+        std::map<int, std::map<int, Meaning>> meanings;  // layerDefUid -> value -> meaning
+        const json defs = j.value("defs", json::object());
+        for (const auto& ld : defs.value("layers", json::array())) {
+            const bool coll = collision_layer_name(s(ld, "identifier"));
+            for (const auto& v : ld.value("intGridValues", json::array())) {
+                const std::string id = s(v, "identifier");
+                Meaning m = id.empty() ? Meaning::kUnknown : override_for(opt, id, file);
+                if (m == Meaning::kUnknown) m = guess_meaning(id, coll);
+                meanings[static_cast<int>(d(ld, "uid"))][static_cast<int>(d(v, "value"))] = m;
             }
         }
+
+        Map map;
+        map.source_file = file;
+        map.name = s(level, "identifier", file);
+        const json layers = level.value("layerInstances", json::array());
+
+        // The grid comes from the collision IntGrid layer if there is one,
+        // otherwise from the first IntGrid layer. Other IntGrid layers are
+        // resampled onto it by pixel overlap.
+        const json* primary = nullptr;
+        for (const auto& li : layers)
+            if (s(li, "__type") == "IntGrid" && (primary == nullptr || (collision_layer_name(s(li, "__identifier")) &&
+                                                                         !collision_layer_name(s(*primary, "__identifier")))))
+                primary = &li;
+        if (!primary) fail(file, "level '" + map.name + "' has no IntGrid layer to read walls from");
+        const double grid = d(*primary, "__gridSize");
+        const double ox0 = d(*primary, "__pxTotalOffsetX");
+        const double oy0 = d(*primary, "__pxTotalOffsetY");
+        if (grid <= 0) fail(file, "IntGrid layer has no grid size");
+        map.resize(static_cast<int>(d(*primary, "__cWid")), static_cast<int>(d(*primary, "__cHei")));
+
+        for (const auto& li : layers) {
+            if (s(li, "__type") != "IntGrid") continue;
+            const int cw = static_cast<int>(d(li, "__cWid"));
+            const double gs = d(li, "__gridSize");
+            const double lx = d(li, "__pxTotalOffsetX") - ox0;
+            const double ly = d(li, "__pxTotalOffsetY") - oy0;
+            const auto& m = meanings[static_cast<int>(d(li, "layerDefUid"))];
+            const auto& values = li.value("intGridCsv", json::array());
+            for (std::size_t k = 0; k < values.size(); ++k) {
+                const int v = values[k].get<int>();
+                if (v == 0) continue;
+                const auto it = m.find(v);
+                const Meaning mean = it == m.end() ? guess_meaning("", collision_layer_name(s(li, "__identifier")))
+                                                   : it->second;
+                if (mean == Meaning::kFloor) continue;
+                // Pixel rectangle of the source cell, mapped to primary cells.
+                const double px0 = lx + static_cast<double>(static_cast<int>(k) % cw) * gs;
+                const double py0 = ly + static_cast<double>(static_cast<int>(k) / cw) * gs;
+                const int x0 = static_cast<int>(std::floor(px0 / grid));
+                const int y0 = static_cast<int>(std::floor(py0 / grid));
+                const int x1 = static_cast<int>(std::ceil((px0 + gs) / grid)) - 1;
+                const int y1 = static_cast<int>(std::ceil((py0 + gs) / grid)) - 1;
+                for (int y = y0; y <= y1; ++y)
+                    for (int x = x0; x <= x1; ++x) {
+                        if (!map.inside(x, y)) continue;
+                        const auto c = static_cast<std::size_t>(map.index(x, y));
+                        if (mean == Meaning::kWall || mean == Meaning::kLow) map.walk[c] = 0;
+                        if (mean == Meaning::kWall || mean == Meaning::kSight) map.sight[c] = 1;
+                    }
+            }
+        }
+
+        // Cells where the level draws nothing at all (no IntGrid value, no
+        // tile in any tile or auto layer) are void outside the playable area,
+        // not floor. Only applied when the level has drawn tiles.
+        {
+            std::vector<std::uint8_t> drawn(map.size(), 0);
+            bool any_drawn_tiles = false;
+            auto mark = [&](double px, double py, double gs) {
+                const int x0 = static_cast<int>(std::floor(px / grid));
+                const int y0 = static_cast<int>(std::floor(py / grid));
+                const int x1 = static_cast<int>(std::ceil((px + gs) / grid)) - 1;
+                const int y1 = static_cast<int>(std::ceil((py + gs) / grid)) - 1;
+                for (int y = y0; y <= y1; ++y)
+                    for (int x = x0; x <= x1; ++x)
+                        if (map.inside(x, y)) drawn[static_cast<std::size_t>(map.index(x, y))] = 1;
+            };
+            for (const auto& li : layers) {
+                const double gs = d(li, "__gridSize", grid);
+                const double lx = d(li, "__pxTotalOffsetX") - ox0;
+                const double ly = d(li, "__pxTotalOffsetY") - oy0;
+                if (s(li, "__type") == "IntGrid") {
+                    const int cw = static_cast<int>(d(li, "__cWid"));
+                    const auto& values = li.value("intGridCsv", json::array());
+                    for (std::size_t k = 0; k < values.size() && cw > 0; ++k)
+                        if (values[k].get<int>() != 0)
+                            mark(lx + static_cast<double>(static_cast<int>(k) % cw) * gs,
+                                 ly + static_cast<double>(static_cast<int>(k) / cw) * gs, gs);
+                }
+                for (const char* key : {"gridTiles", "autoLayerTiles"})
+                    for (const auto& t : li.value(key, json::array())) {
+                        const json px = t.value("px", json());
+                        if (!px.is_array() || px.size() < 2) continue;
+                        any_drawn_tiles = true;
+                        mark(lx + px.at(0).get<double>(), ly + px.at(1).get<double>(), gs);
+                    }
+            }
+            if (any_drawn_tiles) {
+                std::size_t voided = 0;
+                for (std::size_t c = 0; c < map.size(); ++c)
+                    if (!drawn[c] && map.walk[c]) {
+                        map.walk[c] = 0;
+                        map.sight[c] = 1;
+                        ++voided;
+                    }
+                if (voided)
+                    map.notes.push_back(std::to_string(voided) +
+                                        " cells with nothing drawn on them are treated as void, not floor");
+            }
+        }
+
+        for (const auto& li : layers) {
+            if (s(li, "__type") != "Entities") continue;
+            const double offx = d(li, "__pxTotalOffsetX") - ox0;
+            const double offy = d(li, "__pxTotalOffsetY") - oy0;
+            for (const auto& e : li.value("entityInstances", json::array())) {
+                const std::string id = s(e, "__identifier");
+                std::vector<std::string> tags = {id};
+                if (lower(id) != id) tags.push_back(lower(id));
+                for (const auto& t : e.value("__tags", json::array()))
+                    if (t.is_string()) tags.push_back(t.get<std::string>());
+                const json px = e.value("px", json::array({0, 0}));
+                const json pivot = e.value("__pivot", json::array({0.5, 0.5}));
+                const double w = d(e, "width", grid);
+                const double h = d(e, "height", grid);
+                // Top-left of the entity box in pixels, then in cells.
+                const double left = (px.at(0).get<double>() + offx - pivot.at(0).get<double>() * w) / grid;
+                const double top = (px.at(1).get<double>() + offy - pivot.at(1).get<double>() * h) / grid;
+                const double cw = w / grid;
+                const double chh = h / grid;
+                const json name_field = field(e, "name");
+                const std::string name = name_field.is_string() ? name_field.get<std::string>() : id;
+                const json variant = field(e, "variant");
+                const std::vector<std::pair<double, double>> poly = {
+                    {left, top}, {left + cw, top}, {left + cw, top + chh}, {left, top + chh}};
+                if (variant.is_string() && !variant.get<std::string>().empty()) {
+                    VariantOption& vo = option_for(map, variant.get<std::string>(), file);
+                    for (const auto& t : tags) vo.tags.push_back(t);
+                    const auto cells = rasterize(map, poly);
+                    const json bs = field(e, "blocks_sight");
+                    vo.block_walk.insert(vo.block_walk.end(), cells.begin(), cells.end());
+                    if (!bs.is_boolean() || bs.get<bool>()) vo.block_sight.insert(vo.block_sight.end(), cells.begin(), cells.end());
+                    continue;
+                }
+                const json door = field(e, "door");
+                const bool is_door = (door.is_boolean() && door.get<bool>()) || lower(id) == "door";
+                // One cell or smaller: a point. Larger, or a door: a region.
+                if (!is_door && cw <= 1.0 && chh <= 1.0) {
+                    map.points.push_back(Point{name, tags, left + cw / 2, top + chh / 2});
+                } else {
+                    Region r;
+                    r.name = name;
+                    r.tags = tags;
+                    r.door = is_door;
+                    if (is_door && std::find(r.tags.begin(), r.tags.end(), "door") == r.tags.end()) r.tags.push_back("door");
+                    r.cells = rasterize(map, poly);
+                    map.regions.push_back(r);
+                }
+            }
+        }
+        finish(map, file);
+        return map;
+    } catch (const json::exception& e) {
+        fail(file, std::string("unexpected LDtk data: ") + e.what());
     }
-    finish(map, file);
-    return map;
 }
 
 // ----------------------------------------------------------------- loader
 
-Map load_map(const std::string& path, const std::string& level) {
+Map load_map(const std::string& path, const ReaderOptions& opt) {
     const std::string text = read_file(path);
-    const std::string ext = lower(path.substr(path.find_last_of('.') == std::string::npos ? path.size() : path.find_last_of('.')));
+    const auto dot = path.find_last_of('.');
+    const std::string ext = lower(dot == std::string::npos ? std::string() : path.substr(dot));
     const std::string dir = dir_of(path);
     if (ext == ".txt" || ext == ".map") return parse_ascii(text, path);
-    if (ext == ".tmj") return parse_tiled(text, path, dir);
-    if (ext == ".ldtk") return parse_ldtk(text, path, dir, level);
+    if (ext == ".tmj") return parse_tiled(text, path, dir, opt);
+    if (ext == ".tmx") return parse_tmx(text, path, dir, opt);
+    if (ext == ".ldtk") return parse_ldtk(text, path, dir, opt);
     if (ext == ".json") {
         if (text.find("\"adari_map\"") != std::string::npos) return parse_native(text, path);
-        if (text.find("\"tiledversion\"") != std::string::npos) return parse_tiled(text, path, dir);
-        if (text.find("\"jsonVersion\"") != std::string::npos) return parse_ldtk(text, path, dir, level);
+        if (text.find("\"tiledversion\"") != std::string::npos) return parse_tiled(text, path, dir, opt);
+        if (text.find("\"jsonVersion\"") != std::string::npos) return parse_ldtk(text, path, dir, opt);
     }
-    throw std::runtime_error(path + ": unknown map format (expected .txt, .tmj, .ldtk, or JSON from Adari, Tiled or LDtk)");
+    throw std::runtime_error(path + ": unknown map format (expected .txt, .tmx, .tmj, .ldtk, or JSON from Adari, Tiled or LDtk)");
 }
 
 }  // namespace adari

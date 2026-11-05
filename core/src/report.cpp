@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <set>
@@ -10,6 +11,8 @@
 #include <stdexcept>
 
 #include <nlohmann/json.hpp>
+
+#include "adari/grid.hpp"
 
 #ifndef ADARI_VERSION_STRING
 #define ADARI_VERSION_STRING "0.0.0"
@@ -42,6 +45,64 @@ int primary_cell(const Finding& f) {
 }
 
 }  // namespace
+
+std::string summarize(const Map& map) {
+    std::ostringstream os;
+    std::size_t walk = 0, sight = 0, oneway = 0;
+    std::vector<int> walk_cells;
+    for (std::size_t i = 0; i < map.size(); ++i) {
+        if (map.walk[i]) {
+            ++walk;
+            walk_cells.push_back(static_cast<int>(i));
+        }
+        if (map.sight[i]) ++sight;
+        if (map.edge_block[i]) ++oneway;
+    }
+    const auto pct = [&](std::size_t n) { return map.size() ? 100.0 * static_cast<double>(n) / static_cast<double>(map.size()) : 0.0; };
+    os.setf(std::ios::fixed);
+    os.precision(1);
+    os << "map " << map.name << "  (" << map.source_file << ")\n"
+       << "  " << map.width << " x " << map.height << " cells, cell_size " << map.cell_size << "\n"
+       << "  walkable " << walk << " cells (" << pct(walk) << "%), sight-blocking " << sight << " (" << pct(sight)
+       << "%), one-way " << oneway << "\n";
+    const auto comps = components(map, walk_cells);
+    std::vector<std::size_t> sizes;
+    for (const auto& c : comps) sizes.push_back(c.size());
+    std::sort(sizes.rbegin(), sizes.rend());
+    os << "  walkable areas: " << comps.size();
+    if (!sizes.empty()) {
+        os << " (largest";
+        for (std::size_t i = 0; i < sizes.size() && i < 5; ++i) os << " " << sizes[i];
+        if (sizes.size() > 5) os << " ...";
+        os << ")";
+    }
+    os << "\n";
+    std::map<std::string, std::size_t> tags;
+    for (const Point& p : map.points)
+        for (const auto& t : p.tags) ++tags[t];
+    os << "  points: " << map.points.size();
+    if (!tags.empty()) {
+        os << "  tags:";
+        for (const auto& [t, n] : tags) os << " " << t << "(" << n << ")";
+    }
+    os << "\n";
+    std::size_t doors = 0;
+    std::map<std::string, std::size_t> rtags;
+    for (const Region& r : map.regions) {
+        doors += r.door ? 1 : 0;
+        for (const auto& t : r.tags) ++rtags[t];
+    }
+    os << "  regions: " << map.regions.size() << " (" << doors << " doors)";
+    if (!rtags.empty()) {
+        os << "  tags:";
+        for (const auto& [t, n] : rtags) os << " " << t << "(" << n << ")";
+    }
+    os << "\n  variant groups: " << map.groups.size();
+    for (const VariantGroup& g : map.groups) os << " " << g.name << "[" << g.options.size() << (g.optional ? "+none" : "") << "]";
+    os << "\n";
+    for (const std::string& n : map.notes) os << "  note: " << n << "\n";
+    return os.str();
+}
 
 std::string to_text(const Map& map, const Report& rep) {
     std::ostringstream os;
@@ -289,13 +350,23 @@ std::vector<std::uint8_t> overlay_png(const Map& map, const Report& rep, int sca
     return encode_png(w, h, img);
 }
 
+namespace {
+void make_parent(const std::string& path) {
+    const std::filesystem::path p = std::filesystem::u8path(path).parent_path();
+    std::error_code ec;
+    if (!p.empty()) std::filesystem::create_directories(p, ec);
+}
+}  // namespace
+
 void write_file(const std::string& path, const std::string& data) {
+    make_parent(path);
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out << data;
 }
 
 void write_file(const std::string& path, const std::vector<std::uint8_t>& data) {
+    make_parent(path);
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));

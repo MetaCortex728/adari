@@ -46,6 +46,7 @@ add_subdirectory(third_party)
 # reports. No engine types, so it builds and tests anywhere; engine front ends
 # wrap it.
 add_library(adari_core STATIC
+    core/src/decode.cpp
     core/src/grid.cpp
     core/src/map.cpp
     core/src/readers.cpp

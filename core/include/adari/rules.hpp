@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,9 @@ struct Options {
 struct RuleSet {
     std::vector<Rule> rules;
     Options options;
+    // From the rule file's "reader": {"meanings": {...}}; passed to the map
+    // reader so a project can say what its tile classes or IntGrid values mean.
+    std::map<std::string, std::string> meanings;
 };
 
 // Parses a rule file (JSON). Throws std::runtime_error with a readable

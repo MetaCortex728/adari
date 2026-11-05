@@ -1,5 +1,6 @@
 add_executable(adari_tests
     main.cpp
+    test_decode.cpp
     test_grid.cpp
     test_readers.cpp
     test_report.cpp

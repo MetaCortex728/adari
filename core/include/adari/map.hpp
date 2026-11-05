@@ -81,6 +81,10 @@ struct Map {
     // For ASCII maps: the text line of row 0, so findings map to file lines.
     int ascii_first_line = 0;
 
+    // Things the reader wants the user to know, e.g. "no tile carries
+    // collision data, so every tiled cell is floor".
+    std::vector<std::string> notes;
+
     void resize(int w, int h);
     bool inside(int x, int y) const { return x >= 0 && y >= 0 && x < width && y < height; }
     int index(int x, int y) const { return y * width + x; }

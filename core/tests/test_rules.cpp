@@ -69,6 +69,16 @@ TEST_CASE("reachable respects agent radius") {
           Status::kFailed);
 }
 
+TEST_CASE("a target drawn in a wall counts as reached from the cell beside it") {
+    const Map m = parse_native(R"({"adari_map":1,"rows":["#####","#S..#","#####"],
+        "legend":{"S":"point entry"},
+        "points":[{"name":"exit","tags":["exit"],"x":4.5,"y":1.5},
+                  {"name":"far","tags":["far"],"x":4.5,"y":0.5}]})");
+    CHECK(status(run(m, R"({"id":"r","template":"reachable","from":"entry","to":"exit"})")) == Status::kPassed);
+    // (4,0) is a corner wall whose only open neighbour is diagonal (3,1): still reached.
+    CHECK(status(run(m, R"({"id":"r","template":"reachable","from":"entry","to":"far"})")) == Status::kPassed);
+}
+
 TEST_CASE("selectors that match nothing are reported, not passed") {
     const Report r = run(map_of("map\n#####\n#S.E#\n#####\n"),
                          R"({"id":"x","template":"reachable","from":"entry","to":"treasure"})");

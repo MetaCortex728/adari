@@ -132,6 +132,18 @@ RuleSet parse_rules(const std::string& json_text) {
             static_cast<std::size_t>(num(o, "sight_samples", static_cast<double>(set.options.sight_samples)));
     }
 
+    if (root.contains("reader")) {
+        const json& rd = root["reader"];
+        if (!rd.is_object()) throw std::runtime_error("'reader' must be an object");
+        if (rd.contains("meanings")) {
+            if (!rd["meanings"].is_object()) throw std::runtime_error("'reader.meanings' must map names to meanings");
+            for (const auto& [k, v] : rd["meanings"].items()) {
+                if (!v.is_string()) throw std::runtime_error("meaning for '" + k + "' must be a string");
+                set.meanings[k] = v.get<std::string>();
+            }
+        }
+    }
+
     std::set<std::string> ids;
     const auto& known = templates();
     for (const json& j : root["rules"]) {
@@ -253,6 +265,34 @@ std::vector<int> option_cells(const Map& map, const Choice& choice, const std::s
     return out;
 }
 
+// Cells an agent can stand on for a set of cells. When none of them is
+// passable (an exit drawn in the border wall, a door in a wall, a spawn on a
+// prop), the passable 8-neighbours stand in for them: reaching a cell next to
+// the target counts as reaching the target.
+// Cells blocked only because the agent is too wide do not fall back: there the
+// rule should fail.
+std::vector<int> standable(const Map& map, const std::vector<std::uint8_t>& pass,
+                           const std::vector<std::uint8_t>& walk, const std::vector<int>& cells) {
+    std::vector<int> out;
+    for (int c : cells)
+        if (pass[static_cast<std::size_t>(c)]) out.push_back(c);
+    if (!out.empty()) return out;
+    for (int c : cells)
+        if (walk[static_cast<std::size_t>(c)]) return out;  // walkable, just too tight
+    for (int c : cells) {
+        const Cell p = map.cell(c);
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (!map.inside(p.x + dx, p.y + dy)) continue;
+                const int n = map.index(p.x + dx, p.y + dy);
+                if (pass[static_cast<std::size_t>(n)]) out.push_back(n);
+            }
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
 Finding base(const Rule& r) {
     Finding f;
     f.rule_id = r.id;
@@ -275,18 +315,18 @@ Outcome eval_reachable(const Map& map, const Rule& r, const State& s) {
     if (to.empty()) return nothing("to", r.to);
     const auto pass = passable(map, s.walk, r.radius);
     Outcome o;
-    const bool any_start = std::any_of(from.begin(), from.end(),
-                                       [&](int c) { return pass[static_cast<std::size_t>(c)] != 0; });
-    if (!any_start) {
+    const std::vector<int> seeds = standable(map, pass, s.walk, from);
+    if (seeds.empty()) {
         Finding f = base(r);
         f.message = "the start '" + r.from + "' is blocked for an agent of radius " + fmt(r.radius);
         f.cells = from;
         o.failures.push_back(std::move(f));
         return o;
     }
-    const auto dist = reach(map, pass, from);
+    const auto dist = reach(map, pass, seeds);
     for (const Unit& u : to) {
-        const bool ok = std::any_of(u.cells.begin(), u.cells.end(),
+        const std::vector<int> goal = standable(map, pass, s.walk, u.cells);
+        const bool ok = std::any_of(goal.begin(), goal.end(),
                                     [&](int c) { return dist[static_cast<std::size_t>(c)] != kUnreached; });
         if (ok) continue;
         Finding f = base(r);
@@ -301,7 +341,7 @@ Outcome eval_isolated(const Map& map, const Rule& r, const State& s) {
     const std::vector<int> from = select_cells(map, r.from);
     if (from.empty()) return nothing("from", r.from);
     const auto pass = passable(map, s.walk, r.radius);
-    const auto dist = reach(map, pass, from);
+    const auto dist = reach(map, pass, standable(map, pass, s.walk, from));
     std::vector<int> lost;
     for (std::size_t i = 0; i < pass.size(); ++i)
         if (pass[i] && dist[i] == kUnreached) lost.push_back(static_cast<int>(i));
@@ -325,7 +365,7 @@ Outcome eval_path_length(const Map& map, const Rule& r, const State& s) {
     const std::vector<int> to = select_cells(map, r.to);
     if (to.empty()) return nothing("to", r.to);
     const auto pass = passable(map, s.walk, r.radius);
-    const Path p = shortest_path(map, pass, from, to);
+    const Path p = shortest_path(map, pass, standable(map, pass, s.walk, from), standable(map, pass, s.walk, to));
     Outcome o;
     Finding f = base(r);
     if (!p.found) {
@@ -429,12 +469,13 @@ Outcome eval_softlock(const Map& map, const Rule& r, const State& s) {
     const std::vector<int> exits = select_cells(map, r.to);
     if (exits.empty()) return nothing("to", r.to);
     const auto pass = passable(map, s.walk, r.radius);
-    const auto fwd = reach(map, pass, from);
-    const auto bwd = reach(map, pass, exits, true);
+    const std::vector<int> start = standable(map, pass, s.walk, from);
+    const auto fwd = reach(map, pass, start);
+    const auto bwd = reach(map, pass, standable(map, pass, s.walk, exits), true);
     Outcome o;
     // If the start itself cannot reach an exit, every cell would count as
     // stuck; report that once instead (the reachable rule covers the detail).
-    const bool start_ok = std::any_of(from.begin(), from.end(), [&](int c) {
+    const bool start_ok = std::any_of(start.begin(), start.end(), [&](int c) {
         return bwd[static_cast<std::size_t>(c)] != kUnreached;
     });
     if (!start_ok) {

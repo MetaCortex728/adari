@@ -137,13 +137,15 @@ TEST_CASE("LDtk: IntGrid meanings and entities") {
     CHECK(m.sight[static_cast<std::size_t>(m.index(2, 1))] == 0);
     CHECK(m.walk[static_cast<std::size_t>(m.index(0, 0))] == 0);  // wall
     CHECK(m.sight[static_cast<std::size_t>(m.index(0, 0))] == 1);
-    REQUIRE(m.points.size() == 2);
+    REQUIRE(m.points.size() == 1);  // one-cell entities are points
     CHECK(m.points[0].x == doctest::Approx(1.5));
     CHECK(m.points[0].tags == std::vector<std::string>{"Entry", "entry", "start"});
-    REQUIRE(m.regions.size() == 1);  // the 2x1 arena is also a region
+    REQUIRE(m.regions.size() == 1);  // the 2x1 arena is a region
     CHECK(m.regions[0].name == "arena_a");
     CHECK(m.regions[0].cells.size() == 2);
-    CHECK_THROWS_AS(parse_ldtk(ldtk, "p.ldtk", "", "Missing"), std::runtime_error);
+    ReaderOptions missing;
+    missing.level = "Missing";
+    CHECK_THROWS_AS(parse_ldtk(ldtk, "p.ldtk", "", missing), std::runtime_error);
 }
 
 TEST_CASE("rasterize uses cell centres") {

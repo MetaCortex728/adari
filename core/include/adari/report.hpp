@@ -14,6 +14,11 @@ namespace adari {
 
 const char* version();
 
+// What a reader made of a map, without any rules: size, walkable and
+// sight-blocking share, separate walkable areas, tags, regions, doors and
+// variant groups. Useful as a first run on an unfamiliar map.
+std::string summarize(const Map& map);
+
 std::string to_text(const Map& map, const Report& report);
 std::string to_json(const Map& map, const Report& report);
 std::string to_sarif(const Map& map, const Report& report);
